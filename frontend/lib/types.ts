@@ -2,7 +2,7 @@
 // The backend is the source of truth; these stay structurally compatible.
 
 export type Decision = "APPROVED" | "PARTIAL" | "REJECTED" | "MANUAL_REVIEW";
-export type ClaimStatus = "DECIDED" | "DOCUMENT_REJECTED";
+export type ClaimStatus = "DECIDED" | "DOCUMENT_REJECTED" | "AWAITING_HUMAN_REVIEW";
 
 export interface DocumentIssue {
   code: string;
@@ -106,4 +106,17 @@ export interface ResultEvent {
   response: ClaimResponse;
 }
 
-export type StreamEvent = StageEvent | ResultEvent;
+export interface InterruptEvent {
+  type: "interrupt";
+  claim_id: string;
+  payload: {
+    claim_id?: string;
+    draft_decision?: string;
+    claimed_amount?: number;
+    adjudicated_amount?: number;
+    reasons?: string[];
+    message?: string;
+  } | null;
+}
+
+export type StreamEvent = StageEvent | ResultEvent | InterruptEvent;

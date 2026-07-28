@@ -94,13 +94,14 @@ Three required assignment segments + live features overview, LangSmith tracing, 
 3. **What I Would Change Given More Time:**
    - *"Currently, document processing runs sequentially inside a graph node. Given more time, I would leverage LangGraph's `Send` API to fan-out document vision processing in parallel across multiple worker nodes, reducing latency by 3x on multi-document claims."*
    - *"I would also compile the LangGraph with a persistent PostgreSQL checkpointer (`PostgresSaver`) to enable Human-in-the-Loop (`interrupt()`) pause-and-resume workflows when a claim is flagged for manual review."*
+   - *"Proud of cutting a dead 'clinical ReAct' node that re-ran policy lookups without affecting decisions — keeping the multi-agent story honest: perception agents + deterministic judgment."*
 
 ---
 
 ## 4. Outro (10:30–11:00)
 
 - **Reproducibility & Quality Assurance:**
-  - Show the terminal running Pytest: **55/55 unit tests passed**.
+  - Show the terminal running Pytest: **56/56 unit tests passed**.
   - Show the Eval Report (`docs/EVAL_REPORT.md`): **12/12 test cases passed (100% accuracy)** locally and against Cloud Run.
   - Closing statement:
     > *"All code is available on GitHub with Docker Compose instructions, complete component contracts, architecture docs, and 100% eval coverage. Thank you!"*

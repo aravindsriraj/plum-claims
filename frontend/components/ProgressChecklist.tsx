@@ -1,14 +1,16 @@
 import type { StageEvent, StageStatus } from "@/lib/types";
 
 // The pipeline's stages in graph order — labels mirror the backend's STAGES.
+// document_worker may run once per upload; the checklist shows it once.
 const STAGE_ORDER: { id: string; label: string }[] = [
-  { id: "verify_documents", label: "Verifying documents" },
-  { id: "extract_documents", label: "Reading documents" },
+  { id: "document_worker", label: "Reading documents" },
+  { id: "verify_document_set", label: "Verifying document set" },
+  { id: "clinical_tagging", label: "Clinical policy tagging" },
   { id: "cross_validate", label: "Cross-checking details" },
-  { id: "clinical_reasoning", label: "Clinical policy agent" },
   { id: "adjudicate", label: "Applying policy rules" },
   { id: "fraud_check", label: "Fraud screening" },
   { id: "synthesize_decision", label: "Finalizing decision" },
+  { id: "human_review_gate", label: "Human review" },
 ];
 
 export interface StageState {
@@ -17,9 +19,8 @@ export interface StageState {
 }
 
 /**
- * Live pipeline progress: a checklist of the six stages, driven by real
- * stage events streamed from the backend — each done-stage shows the actual
- * trace line the pipeline produced, never a simulated message.
+ * Live pipeline progress: checklist driven by real stage events streamed
+ * from the backend — each done-stage shows the actual trace line produced.
  */
 export default function ProgressChecklist({
   stages,

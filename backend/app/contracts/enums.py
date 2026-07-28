@@ -55,12 +55,14 @@ class Decision(StrEnum):
 class ClaimStatus(StrEnum):
     """Top-level processing outcome for a submission.
 
-    DOCUMENT_REJECTED is the early-stop state: the pipeline halted before any
-    claim decision because the uploaded documents themselves are unacceptable.
+    DOCUMENT_REJECTED — early-stop: documents unacceptable; no claim decision.
+    DECIDED — pipeline finished with APPROVED/PARTIAL/REJECTED/MANUAL_REVIEW.
+    AWAITING_HUMAN_REVIEW — HITL pause after MANUAL_REVIEW (CLAIMS_HITL=true).
     """
 
     DECIDED = "DECIDED"
     DOCUMENT_REJECTED = "DOCUMENT_REJECTED"
+    AWAITING_HUMAN_REVIEW = "AWAITING_HUMAN_REVIEW"
 
 
 class DocumentIssueCode(StrEnum):

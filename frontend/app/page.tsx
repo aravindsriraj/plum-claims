@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { fileToBase64, submitClaimStream } from "@/lib/api";
-import type { ClaimPayload, ClaimResponse } from "@/lib/types";
+import { fileToBase64, resumeClaim, submitClaimStream } from "@/lib/api";
+import type { ClaimPayload, ClaimResponse, InterruptEvent } from "@/lib/types";
 import DecisionCard from "@/components/DecisionCard";
 import DocumentIssues from "@/components/DocumentIssues";
 import ProgressChecklist, { stagesFromEvent, type StageState } from "@/components/ProgressChecklist";
@@ -17,7 +17,6 @@ const CATEGORIES = [
   "ALTERNATIVE_MEDICINE",
 ];
 
-// Member roster from policy_terms.json — surfaced so the demo is self-service.
 const MEMBERS = [
   ["EMP001", "Rajesh Kumar"], ["EMP002", "Priya Singh"], ["EMP003", "Amit Verma"],
   ["EMP004", "Sneha Reddy"], ["EMP005", "Vikram Joshi"], ["EMP006", "Kavita Nair"],
@@ -35,8 +34,10 @@ export default function Home() {
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [stages, setStages] = useState<Record<string, StageState>>({});
   const [response, setResponse] = useState<ClaimResponse | null>(null);
+  const [interrupt, setInterrupt] = useState<InterruptEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
@@ -44,6 +45,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResponse(null);
+    setInterrupt(null);
     setStages({});
     try {
       const documents = await Promise.all(
@@ -66,8 +68,10 @@ export default function Home() {
         documents,
       };
       setResponse(
-        await submitClaimStream(payload, (event) =>
-          setStages((prev) => stagesFromEvent(prev, event))
+        await submitClaimStream(
+          payload,
+          (event) => setStages((prev) => stagesFromEvent(prev, event)),
+          (event) => setInterrupt(event)
         )
       );
     } catch (err) {
@@ -77,13 +81,35 @@ export default function Home() {
     }
   }
 
+  async function onResume(action: "approve" | "reject") {
+    if (!response) return;
+    setResuming(true);
+    setError(null);
+    try {
+      const next = await resumeClaim(response.claim_id, action);
+      setResponse(next);
+      setInterrupt(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resume failed");
+    } finally {
+      setResuming(false);
+    }
+  }
+
+  const bannerClass =
+    response?.status === "DECIDED"
+      ? "decided"
+      : response?.status === "AWAITING_HUMAN_REVIEW"
+        ? "awaiting"
+        : "doc-rejected";
+
   return (
     <main className="container">
       <h1>Plum — Claims Processing</h1>
       <p className="subtitle">
-        Submit a claim with medical documents. The pipeline verifies documents,
-        extracts data with a vision model, and adjudicates deterministically
-        against policy PLUM_GHI_2024.
+        Submit a claim with medical documents. The pipeline verifies documents in
+        parallel, tags clinical content with a tool-calling agent, and adjudicates
+        deterministically against policy PLUM_GHI_2024.
       </p>
 
       <form className="card" onSubmit={onSubmit}>
@@ -150,9 +176,43 @@ export default function Home() {
 
       {response && (
         <>
-          <div className={`banner ${response.status === "DECIDED" ? "decided" : "doc-rejected"}`}>
+          <div className={`banner ${bannerClass}`}>
             <strong>{response.claim_id}</strong> — {response.member_message}
           </div>
+
+          {response.status === "AWAITING_HUMAN_REVIEW" && (
+            <div className="card hitl-card">
+              <h2>Operations review required</h2>
+              <p>
+                {interrupt?.payload?.message ??
+                  "This claim was flagged for manual review (fraud/risk signals)."}
+              </p>
+              {interrupt?.payload?.adjudicated_amount != null && (
+                <p>
+                  Adjudicated amount if approved: ₹
+                  {interrupt.payload.adjudicated_amount.toLocaleString("en-IN")}
+                </p>
+              )}
+              <div className="hitl-actions">
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={resuming}
+                  onClick={() => onResume("approve")}
+                >
+                  {resuming ? "Submitting…" : "Approve payout"}
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={resuming}
+                  onClick={() => onResume("reject")}
+                >
+                  Reject claim
+                </button>
+              </div>
+            </div>
+          )}
 
           {response.status === "DOCUMENT_REJECTED" && (
             <DocumentIssues issues={response.document_issues} />

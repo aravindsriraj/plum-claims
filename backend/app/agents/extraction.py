@@ -131,6 +131,50 @@ def _from_llm_read(
     return extracted
 
 
+def extract_one_document(
+    doc: DocumentInput,
+    classified: ClassifiedDocument,
+    policy: Policy,
+    trace: TraceRecorder,
+    llm_read: LlmDocumentRead | None = None,
+) -> ExtractedDocument:
+    """Extract structured data from a single document (used by Send workers)."""
+    if doc.file_content_base64:
+        if llm_read is None:
+            raise RuntimeError(
+                f"Vision read for {doc.file_id} missing — verification "
+                f"must read every uploaded document exactly once"
+            )
+        extracted = _from_llm_read(doc, classified, llm_read, policy, trace)
+    elif doc.content is not None:
+        extracted = _from_provided_content(doc, classified, policy)
+    else:
+        extracted = ExtractedDocument(
+            file_id=doc.file_id,
+            doc_type=classified.detected_type,
+            method=ExtractionMethod.METADATA,
+            patient_name=classified.patient_name_on_doc,
+            overall_confidence=0.5,
+            tags=DocumentTags(),
+        )
+
+    trace.record(
+        COMPONENT,
+        "EXTRACTION",
+        "PASS",
+        f"{doc.file_id}: extracted via {extracted.method.value} "
+        f"(confidence {extracted.overall_confidence:.2f}"
+        + (
+            f", unreadable: {extracted.unreadable_fields}"
+            if extracted.unreadable_fields
+            else ""
+        )
+        + ")",
+        extracted.model_dump(mode="json"),
+    )
+    return extracted
+
+
 def extract_documents(
     documents: list[DocumentInput],
     classified: list[ClassifiedDocument],
@@ -149,43 +193,10 @@ def extract_documents(
     results: list[ExtractedDocument] = []
 
     for doc in documents:
-        cd = by_id[doc.file_id]
-        if doc.file_content_base64:
-            read = reads.get(doc.file_id)
-            if read is None:
-                raise RuntimeError(
-                    f"Vision read for {doc.file_id} missing — verification "
-                    f"must read every uploaded document exactly once"
-                )
-            extracted = _from_llm_read(doc, cd, read, policy, trace)
-        elif doc.content is not None:
-            extracted = _from_provided_content(doc, cd, policy)
-        else:
-            # Metadata-only document (eval cases that stop before extraction):
-            # an empty shell so downstream stages see the file existed.
-            extracted = ExtractedDocument(
-                file_id=doc.file_id,
-                doc_type=cd.detected_type,
-                method=ExtractionMethod.METADATA,
-                patient_name=cd.patient_name_on_doc,
-                overall_confidence=0.5,
-                tags=DocumentTags(),
+        results.append(
+            extract_one_document(
+                doc, by_id[doc.file_id], policy, trace, llm_read=reads.get(doc.file_id)
             )
-
-        trace.record(
-            COMPONENT,
-            "EXTRACTION",
-            "PASS",
-            f"{doc.file_id}: extracted via {extracted.method.value} "
-            f"(confidence {extracted.overall_confidence:.2f}"
-            + (
-                f", unreadable: {extracted.unreadable_fields}"
-                if extracted.unreadable_fields
-                else ""
-            )
-            + ")",
-            extracted.model_dump(mode="json"),
         )
-        results.append(extracted)
 
     return results

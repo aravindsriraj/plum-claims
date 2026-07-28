@@ -6,12 +6,19 @@ APPROVED / PARTIAL / REJECTED / MANUAL_REVIEW against a JSON-defined policy —
 with a complete audit trace for every decision.
 
 **Design principle: LLMs for perception, code for judgment.** Gemini 3.6 Flash
-reads documents & invokes policy tools via a ReAct sub-agent; deterministic Python applies policy arithmetic. See `docs/ARCHITECTURE.md`.
+reads documents; a LangGraph `Send` fan-out processes uploads in parallel; a
+real `create_agent` clinical tagger enriches policy tags; deterministic Python
+applies policy arithmetic. Optional HITL (`CLAIMS_HITL`) pauses on
+`MANUAL_REVIEW`. See `docs/ARCHITECTURE.md`.
 
 ## Observability & Tracing
 
-Full LangSmith tracing is integrated across LangGraph nodes and LLM calls under project `plum-claims`:
-- **LangSmith Project:** `plum-claims` (https://smith.langchain.com)
+LangSmith project **`plum-claims`** ([smith.langchain.com](https://smith.langchain.com)):
+
+- Parent **`ProcessClaim`** run for sync + stream (UI), **`ResumeClaim`** for HITL
+- Nested LangGraph nodes, **`GeminiStructured`** vision/LLM calls, **`ClinicalTaggingAgent`**
+- Searchable metadata: `claim_id`, member, category, final `decision` / `status`
+- Set `LANGSMITH_API_KEY` (optional `LANGSMITH_PROJECT`) — no key means tracing stays off
 
 ## Live deployment (Cloud Run, asia-south1)
 
@@ -60,11 +67,11 @@ npm install && npm run build && npm run start   # http://localhost:3000
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests/        # 57 unit tests (rules, tagging, agents, API)
+.venv/bin/python -m pytest tests/        # unit tests (rules, tagging, agents, API)
 .venv/bin/python -m evals.run_evals      # 12 assignment test cases -> docs/EVAL_REPORT.md
 ```
 
-Current status: **57/57 unit tests, 12/12 eval cases** (see
+Current status: **59/59 unit tests, 12/12 eval cases** (see
 `docs/EVAL_REPORT.md`, regenerated on every run).
 
 ## Deploy (Cloud Run)
@@ -80,28 +87,18 @@ gcloud builds submit --tag $REGION-docker.pkg.dev/$PROJECT_ID/plum/backend ./bac
 gcloud run deploy claims-api --image $REGION-docker.pkg.dev/$PROJECT_ID/plum/backend \
   --region $REGION --allow-unauthenticated --set-env-vars GEMINI_API_KEY=$GEMINI_API_KEY
 
-# Frontend (point at the deployed backend URL)
+# Frontend (API_URL is a runtime env — no rebuild when the API URL changes)
 BACKEND_URL=$(gcloud run services describe claims-api --region $REGION --format='value(status.url)')
-gcloud builds submit --tag $REGION-docker.pkg.dev/$PROJECT_ID/plum/frontend ./frontend \
-  --substitutions=_API_URL=$BACKEND_URL
+gcloud builds submit --config cloudbuild.yaml ./frontend
 gcloud run deploy claims-ui --image $REGION-docker.pkg.dev/$PROJECT_ID/plum/frontend \
-  --region $REGION --allow-unauthenticated
+  --region $REGION --allow-unauthenticated \
+  --set-env-vars API_URL=$BACKEND_URL
 ```
-
-(The frontend image is built with `API_URL` baked in via
-`frontend/cloudbuild.yaml`:
-
-```bash
-gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=_API_URL=$BACKEND_URL ./frontend
-```
-
-)
 
 ## Layout
 
 - `backend/app/contracts/` — Pydantic schemas (see `docs/CONTRACTS.md`)
-- `backend/app/graph/` — LangGraph pipeline (7 components)
+- `backend/app/graph/` — LangGraph pipeline (Send fan-out, clinical agent, HITL)
 - `backend/app/rules/` — deterministic adjudication, financial engine, fraud,
   semantic tagging (clinical text → policy vocabulary)
 - `backend/app/agents/` — LLM-facing agents + decision/explanation

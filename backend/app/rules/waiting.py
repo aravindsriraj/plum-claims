@@ -20,23 +20,47 @@ class WaitingPeriodResult(BaseModel):
     reason: str = ""
 
 
+def _evaluate_wait(
+    join_date: date,
+    treatment_date: date,
+    waiting_days: int,
+    *,
+    check_name: str,
+    condition: str | None = None,
+    passed_reason: str,
+    failed_reason: str,
+) -> WaitingPeriodResult:
+    eligible_from = join_date + timedelta(days=waiting_days)
+    passed = treatment_date >= eligible_from
+    return WaitingPeriodResult(
+        check_name=check_name,
+        condition=condition,
+        passed=passed,
+        eligible_from=eligible_from,
+        days_waiting=waiting_days,
+        reason=passed_reason.format(eligible_from=eligible_from.isoformat())
+        if passed
+        else failed_reason.format(eligible_from=eligible_from.isoformat()),
+    )
+
+
 def check_initial_waiting_period(
     join_date: date, treatment_date: date, waiting_days: int
 ) -> WaitingPeriodResult:
     """The blanket waiting period every member serves from their join date."""
-    eligible_from = join_date + timedelta(days=waiting_days)
-    passed = treatment_date >= eligible_from
-    return WaitingPeriodResult(
+    treatment = treatment_date.isoformat()
+    return _evaluate_wait(
+        join_date,
+        treatment_date,
+        waiting_days,
         check_name="INITIAL_WAITING_PERIOD",
-        passed=passed,
-        eligible_from=eligible_from,
-        days_waiting=waiting_days,
-        reason=(
-            f"Treatment date {treatment_date.isoformat()} is on/after the end of the "
-            f"{waiting_days}-day initial waiting period ({eligible_from.isoformat()})."
-            if passed
-            else f"Treatment date {treatment_date.isoformat()} falls within the "
-            f"{waiting_days}-day initial waiting period. Eligible from {eligible_from.isoformat()}."
+        passed_reason=(
+            f"Treatment date {treatment} is on/after the end of the "
+            f"{waiting_days}-day initial waiting period ({{eligible_from}})."
+        ),
+        failed_reason=(
+            f"Treatment date {treatment} falls within the "
+            f"{waiting_days}-day initial waiting period. Eligible from {{eligible_from}}."
         ),
     )
 
@@ -49,25 +73,25 @@ def check_specific_waiting_periods(
 ) -> list[WaitingPeriodResult]:
     """One result per matched condition that has a policy waiting period."""
     results: list[WaitingPeriodResult] = []
+    treatment = treatment_date.isoformat()
     for condition in matched_conditions:
         waiting_days = specific_conditions_days.get(condition)
         if waiting_days is None:
-            continue  # condition has no specific waiting period in this policy
-        eligible_from = join_date + timedelta(days=waiting_days)
-        passed = treatment_date >= eligible_from
+            continue
         results.append(
-            WaitingPeriodResult(
+            _evaluate_wait(
+                join_date,
+                treatment_date,
+                waiting_days,
                 check_name=f"SPECIFIC_WAITING_PERIOD[{condition}]",
                 condition=condition,
-                passed=passed,
-                eligible_from=eligible_from,
-                days_waiting=waiting_days,
-                reason=(
-                    f"{condition}: treatment on {treatment_date.isoformat()} is on/after the "
-                    f"{waiting_days}-day waiting period end ({eligible_from.isoformat()})."
-                    if passed
-                    else f"{condition}: {waiting_days}-day waiting period not served. "
-                    f"Eligible from {eligible_from.isoformat()}."
+                passed_reason=(
+                    f"{condition}: treatment on {treatment} is on/after the "
+                    f"{waiting_days}-day waiting period end ({{eligible_from}})."
+                ),
+                failed_reason=(
+                    f"{condition}: {waiting_days}-day waiting period not served. "
+                    f"Eligible from {{eligible_from}}."
                 ),
             )
         )

@@ -1,11 +1,10 @@
-# Builds the frontend image with API_URL baked into the Next.js rewrite.
-# Usage: gcloud builds submit --config cloudbuild.yaml --substitutions=_API_URL=https://claims-api-....run.app .
+# Builds the frontend image. API_URL is a runtime env on Cloud Run / compose —
+# not a build arg (see app/api/[...path]/route.ts).
+# Usage: gcloud builds submit --config cloudbuild.yaml .
 steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - build
-      - --build-arg
-      - API_URL=${_API_URL}
       - -t
       - asia-south1-docker.pkg.dev/$PROJECT_ID/plum/frontend
       - .

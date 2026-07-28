@@ -14,7 +14,10 @@ from typing import TypeVar
 
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langsmith.run_helpers import tracing_context
 from pydantic import BaseModel
+
+from app.observability.langsmith import traceable
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -22,6 +25,24 @@ DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 # Hard ceiling per call so a hung model degrades the claim instead of the request.
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+
+
+def _structured_trace_inputs(inputs: dict) -> dict:
+    schema = inputs.get("schema")
+    prompt = inputs.get("prompt") or ""
+    return {
+        "schema": getattr(schema, "__name__", str(schema)),
+        "prompt_chars": len(prompt),
+        "prompt_preview": prompt[:400],
+        "has_image": bool(inputs.get("image_base64")),
+        "mime_type": inputs.get("mime_type"),
+    }
+
+
+def _structured_trace_outputs(outputs):
+    if isinstance(outputs, BaseModel):
+        return outputs.model_dump(mode="json")
+    return outputs
 
 
 class LlmClient:
@@ -32,6 +53,7 @@ class LlmClient:
     """
 
     def __init__(self, model: str = DEFAULT_MODEL) -> None:
+        self._model_name = model
         self._chat = ChatGoogleGenerativeAI(
             model=model,
             temperature=0,  # perception tasks want determinism, not creativity
@@ -40,6 +62,12 @@ class LlmClient:
         )
         self.call_count = 0
 
+    @traceable(
+        name="GeminiStructured",
+        run_type="llm",
+        process_inputs=_structured_trace_inputs,
+        process_outputs=_structured_trace_outputs,
+    )
     def structured(
         self,
         schema: type[T],
@@ -52,6 +80,10 @@ class LlmClient:
         Pass `image_base64` for vision tasks (document classification /
         extraction from real uploads). Raises on validation failure or
         timeout — callers are expected to wrap with run_resilient().
+
+        The inner ChatGoogleGenerativeAI invoke is tracing-suppressed so
+        megabyte base64 images are not uploaded to LangSmith; this span
+        carries schema/prompt preview + structured outputs instead.
         """
         content: list[dict] = [{"type": "text", "text": prompt}]
         if image_base64:
@@ -62,6 +94,8 @@ class LlmClient:
                 }
             )
         self.call_count += 1
-        return self._chat.with_structured_output(schema).invoke(
-            [HumanMessage(content=content)]
-        )
+        # Nested provider span would re-upload the full image; keep one clean span.
+        with tracing_context(enabled=False):
+            return self._chat.with_structured_output(schema).invoke(
+                [HumanMessage(content=content)]
+            )

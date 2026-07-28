@@ -98,20 +98,42 @@ consistency evaluation (`LlmClinicalVerdict`).
 
 ---
 
-## 3b. ClinicalReasoningAgent (ReAct Sub-Agent)
+## 3b. ClinicalTaggingAgent
 
-**File:** `app/agents/clinical_agent.py` · **Resilient:** yes (fallback → skip + warning)
+**File:** `app/agents/clinical_agent.py` · **Resilient:** yes (fallback → keep existing tags)
 
 | | |
 |---|---|
 | **Input** | `docs: list[ExtractedDocument]`; `policy: Policy`; `llm: LlmClient \| None` |
-| **Output** | `ClinicalAssessment{exclusions_found[], waiting_periods_found[], pre_auth_required[], summary}` |
-| **Raises** | nothing for data problems |
+| **Output** | `list[ExtractedDocument]` with tags union-merged from agent findings |
+| **Raises** | LLM/tool failures (caught by `run_resilient`) |
 
 Behavior contract:
-Dynamically invokes policy tools (`lookup_policy_exclusion`,
-`check_condition_waiting_period`, `verify_high_value_test_preauth`) on extracted
-diagnoses, treatments, and line items. Emits tool finding evidence into the trace and updates graph state.
+
+1. If `llm is None` → no-op; deterministic tags retained (eval path).
+2. Otherwise runs `langchain.agents.create_agent` with tools
+   `lookup_policy_exclusion`, `check_condition_waiting_period`,
+   `verify_high_value_test`, `list_waiting_condition_keys`.
+3. Structured output `ClinicalTaggingResult` is whitelist-validated against
+   the policy vocabulary, then union-merged into each document's tags.
+4. Never calculates money, dates, or final decisions — perception only.
+
+---
+
+## 3c. HumanReviewGate (HITL)
+
+**File:** `app/graph/pipeline.py` (`human_review_gate_node`) · Requires checkpointer
+
+| | |
+|---|---|
+| **Input** | Graph state after synthesize; `hitl_enabled: bool` |
+| **Output** | Updated `ClaimDecision` after ops resume, or no-op |
+| **API** | Pause → `status=AWAITING_HUMAN_REVIEW`; resume via `POST /claims/{id}/resume` |
+
+When `CLAIMS_HITL=true` and decision is `MANUAL_REVIEW`, calls LangGraph
+`interrupt(payload)`. Resume body: `{action: "approve"|"reject", note?}`.
+Approve pays `adjudication.approved_amount`; reject zeros the claim.
+Evals keep `CLAIMS_HITL=false` so TC009 returns finished `MANUAL_REVIEW`.
 
 ---
 
@@ -216,10 +238,12 @@ Guarantee: the pipeline never propagates a component exception to the API.
 
 **Files:** `app/agents/explanation.py`, `app/agents/member_message.py`
 
+Post-graph assembly in `ClaimService` — not LangGraph nodes.
+
 | Component | Input | Output | Behavior |
 |---|---|---|---|
 | `build_explanation` | `ClaimResponse` | `str` (ops narrative) | Pure deterministic templating from trace events — no LLM. |
-| `polish_member_message` | `template: str`, `llm`, `trace` | `str` (warm prose) | LLM prose pass. Every figure in the template (amounts, dates, %) MUST be preserved verbatim in the rewrite; otherwise falls back to template. |
+| `polish_member_message` | `template: str`, `llm`, `trace` | `str` (warm prose) | Optional LLM prose pass. Every figure in the template (amounts, dates, %) MUST be preserved verbatim in the rewrite; otherwise falls back to template. Disabled in evals/tests via `CLAIMS_POLISH_MESSAGES=false`. |
 
 ---
 
@@ -262,5 +286,9 @@ the pipeline (adjudication then tags it deterministically on the spot).
 | | |
 |---|---|
 | **Function** | `configure_langsmith()` |
-| **Behavior** | Exports `LANGSMITH_TRACING=true`, `LANGCHAIN_TRACING_V2=true`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT=plum-claims`, and `LANGSMITH_API_KEY` to the process environment. Decorates top-level service execution via `@traceable(name="ProcessClaim", run_type="chain")`. |
-| **Side Effects** | All LangGraph node state transitions, tool calls, and Gemini 3.6 Flash LLM calls generate hierarchical spans in real-time under the `plum-claims` LangSmith project dashboard. |
+| **Behavior** | If `LANGSMITH_API_KEY` (or `LANGCHAIN_API_KEY`) is set: exports tracing env vars and project `plum-claims`. |
+| **Parent runs** | `@traceable ProcessClaim` wraps `ClaimService.process` and `process_stream`; `ResumeClaim` wraps HITL resume. Inputs strip base64; outputs summarize decision/status. |
+| **Graph config** | `graph_config(...)` sets `thread_id`, `run_name`, tags (`plum-claims`, mode, `claim_id`), and metadata (member, category, amounts). |
+| **Child spans** | LangGraph nodes auto-nest; `GeminiStructured` wraps vision/structured LLM calls (image bytes not uploaded); `ClinicalTaggingAgent` wraps the tool-calling agent. |
+| **Annotate** | `annotate_claim_run(response)` stamps final decision/status/llm_calls onto the parent run. |
+| **Side Effects** | Hierarchical traces appear under the `plum-claims` LangSmith project when a key is configured; otherwise no-op. |

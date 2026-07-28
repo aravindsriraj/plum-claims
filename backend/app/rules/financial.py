@@ -28,10 +28,13 @@ def is_network_hospital(provider_name: str | None, network_hospitals: list[str])
     if not provider_name:
         return False
     candidate = normalize(provider_name)
-    return any(
-        normalize(h) and (normalize(h) in candidate or candidate in normalize(h))
-        for h in network_hospitals
-    )
+    if not candidate:
+        return False
+    for hospital in network_hospitals:
+        name = normalize(hospital)
+        if name and (name in candidate or candidate in name):
+            return True
+    return False
 
 
 def apply_sub_limit(

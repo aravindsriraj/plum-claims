@@ -60,7 +60,16 @@ button.primary:disabled { opacity: 0.55; cursor: wait; }
 }
 .banner.decided { background: #eef7f0; border-color: #b7e2c4; }
 .banner.doc-rejected { background: #fdf3e7; border-color: #f5d5a8; }
+.banner.awaiting { background: #eef0ff; border-color: #c7c9f5; }
 .banner.error { background: #fdecea; border-color: #f3b6ae; }
+
+.hitl-card { border-left: 3px solid var(--accent); }
+.hitl-actions { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+button.secondary {
+  background: #fff; color: var(--fail); border: 1px solid var(--fail);
+  padding: 11px 22px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+button.secondary:disabled { opacity: 0.55; cursor: wait; }
 
 .decision-chip {
   display: inline-block; padding: 4px 14px; border-radius: 999px;

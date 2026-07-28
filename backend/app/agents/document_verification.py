@@ -126,43 +126,22 @@ def read_document(
     ), None
 
 
-def verify_documents(
+def evaluate_document_set(
     category: ClaimCategory,
     member_name: str,
-    documents: list[DocumentInput],
+    classified: list[ClassifiedDocument],
     policy: Policy,
     trace: TraceRecorder,
-    llm: LlmClient | None = None,
-) -> tuple[list[ClassifiedDocument], list[DocumentIssue], dict[str, LlmDocumentRead]]:
-    """Read all uploads and validate the set against policy requirements.
+) -> list[DocumentIssue]:
+    """Validate the classified document *set* against policy requirements.
 
-    Returns (classified_documents, issues, llm_reads). A non-empty issues list
-    means the pipeline must stop; the issues tell the member exactly what to
-    fix. llm_reads carries the raw vision read per file_id for the
-    ExtractionAgent (empty in simulation mode).
+    Per-document unreadable issues plus set-level missing/wrong-type/patient
+    mismatch. Non-empty return ⇒ pipeline must early-stop.
     """
     requirement = policy.document_requirement(category)
     issues: list[DocumentIssue] = []
-    classified: list[ClassifiedDocument] = []
-    reads: dict[str, LlmDocumentRead] = {}
 
-    # Step 1: read each document (or read its simulation metadata).
-    for doc in documents:
-        cd, read = read_document(doc, llm, policy, category)
-        classified.append(cd)
-        if read is not None:
-            reads[doc.file_id] = read
-        trace.record(
-            COMPONENT,
-            "EXTRACTION",
-            "PASS",
-            f"{doc.file_name or doc.file_id}: read as {cd.detected_type.value} "
-            f"(quality {cd.quality.value}, confidence {cd.detection_confidence:.2f}, "
-            f"via {cd.method.value}).",
-            cd.model_dump(mode="json"),
-        )
-
-    # Step 2: unreadable documents — ask for a re-upload of that specific file.
+    # Unreadable documents — ask for a re-upload of that specific file.
     for cd in classified:
         if cd.quality == DocumentQuality.UNREADABLE:
             doc_label = (
@@ -186,7 +165,7 @@ def verify_documents(
             )
             trace.warn(COMPONENT, f"{cd.file_id}: document unreadable, re-upload requested.")
 
-    # Step 3: required document types for this claim category.
+    # Required document types for this claim category.
     present_types = {cd.detected_type for cd in classified}
     for required_type in requirement.required:
         if required_type not in present_types:
@@ -210,14 +189,10 @@ def verify_documents(
                 COMPONENT, f"Required document {required_type.value} is missing from the upload."
             )
 
-    # Step 4: wrong document type uploaded in place of a required one.
-    # Two flavors: a type this claim doesn't accept at all, or a SURPLUS
-    # duplicate (e.g. a second prescription when a bill is what's missing).
+    # Wrong document type / surplus duplicate.
     accepted_types = set(requirement.required) | set(requirement.optional)
     seen_types: set[DocumentType] = set()
     for cd in classified:
-        # An unreadable document already has its own issue above; piling a
-        # wrong-type complaint on top would be noise, not signal.
         if cd.quality == DocumentQuality.UNREADABLE:
             continue
         is_surplus_duplicate = cd.detected_type in seen_types
@@ -248,8 +223,7 @@ def verify_documents(
                 f"{cd.file_id}: {cd.detected_type.value} does not satisfy the requirements.",
             )
 
-    # Step 5: patient identity — all documents must name the same patient,
-    # and that patient must be the claiming member.
+    # Patient identity across documents vs claiming member.
     named = [(cd.file_id, cd.file_name, cd.patient_name_on_doc) for cd in classified]
     named = [n for n in named if n[2]]
     distinct_names = {normalize(n[2]) for n in named}
@@ -270,7 +244,6 @@ def verify_documents(
         )
         trace.warn(COMPONENT, f"Patient mismatch across documents: {per_doc}.")
     elif distinct_names and normalize(member_name) not in distinct_names.pop():
-        # Single patient on the docs, but not the claiming member.
         per_doc = "; ".join(
             f"'{fname or fid}' belongs to {pname}" for fid, fname, pname in named
         )
@@ -293,4 +266,45 @@ def verify_documents(
             f"Document set satisfies {category.value} requirements "
             f"(required: {[t.value for t in requirement.required]}).",
         )
+    return issues
+
+
+def verify_documents(
+    category: ClaimCategory,
+    member_name: str,
+    documents: list[DocumentInput],
+    policy: Policy,
+    trace: TraceRecorder,
+    llm: LlmClient | None = None,
+) -> tuple[list[ClassifiedDocument], list[DocumentIssue], dict[str, LlmDocumentRead]]:
+    """Read all uploads and validate the set against policy requirements.
+
+    Returns (classified_documents, issues, llm_reads). A non-empty issues list
+    means the pipeline must stop; the issues tell the member exactly what to
+    fix. llm_reads carries the raw vision read per file_id for the
+    ExtractionAgent (empty in simulation mode).
+
+    Kept for unit tests and the eval path that call this agent directly.
+    The LangGraph pipeline fans out `read_document` via Send, then calls
+    `evaluate_document_set`.
+    """
+    classified: list[ClassifiedDocument] = []
+    reads: dict[str, LlmDocumentRead] = {}
+
+    for doc in documents:
+        cd, read = read_document(doc, llm, policy, category)
+        classified.append(cd)
+        if read is not None:
+            reads[doc.file_id] = read
+        trace.record(
+            COMPONENT,
+            "EXTRACTION",
+            "PASS",
+            f"{doc.file_name or doc.file_id}: read as {cd.detected_type.value} "
+            f"(quality {cd.quality.value}, confidence {cd.detection_confidence:.2f}, "
+            f"via {cd.method.value}).",
+            cd.model_dump(mode="json"),
+        )
+
+    issues = evaluate_document_set(category, member_name, classified, policy, trace)
     return classified, issues, reads

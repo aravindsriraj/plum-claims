@@ -20,6 +20,11 @@ def build_explanation(response: ClaimResponse) -> str:
         lines.append("")
         lines.append("No claim decision was made.")
 
+    if response.status == ClaimStatus.AWAITING_HUMAN_REVIEW:
+        lines.append("Pipeline paused for human-in-the-loop review (MANUAL_REVIEW).")
+        lines.append("Awaiting operations approve/reject via POST /claims/{id}/resume.")
+        lines.append("")
+
     if response.decision:
         d = response.decision
         lines.append(

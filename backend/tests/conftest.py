@@ -8,3 +8,4 @@ leaves it enabled (default true in app.main).
 import os
 
 os.environ["CLAIMS_POLISH_MESSAGES"] = "false"
+os.environ["CLAIMS_HITL"] = "false"

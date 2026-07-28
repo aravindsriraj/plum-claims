@@ -1,77 +1,212 @@
-"""ClinicalReasoningAgent: an autonomous ReAct Sub-Agent node for LangGraph.
+"""ClinicalTaggingAgent: tool-calling agent for clinical perception.
 
-Evaluates clinical text and billing line items by invoking domain policy tools:
-  - lookup_policy_exclusion
-  - check_condition_waiting_period
-  - verify_high_value_test_preauth
-
-Updates the graph state with clinical finding summaries and tool call evidence.
+When an LLM is configured, maps diagnoses/treatments onto the policy
+vocabulary via deterministic lookup tools, then union-merges validated tags
+into documents. Without an LLM (evals), this is a no-op.
 """
 
+from __future__ import annotations
+
+from langchain.agents import create_agent
+from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from app.agents.tools import (
-    check_condition_waiting_period,
-    get_clinical_tools,
-    lookup_policy_exclusion,
-    verify_high_value_test_preauth,
-)
-from app.contracts.documents import ExtractedDocument
+
+from app.contracts.documents import DocumentTags, ExtractedDocument, PolicyTag
 from app.llm.client import LlmClient
+from app.observability.langsmith import traceable
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
+from app.rules.tagging import match_high_value_test, merge_tags, tag_deterministic, validate_llm_tags
 
-COMPONENT = "ClinicalReasoningAgent"
+COMPONENT = "ClinicalTaggingAgent"
+
+SYSTEM_PROMPT = """You are a clinical policy tagging specialist for Indian health insurance.
+Your ONLY job is perception: map diagnoses, treatments, medicines, and billed
+tests onto the insurer's policy vocabulary using the provided tools.
+
+Rules:
+- Call tools to verify exclusions, waiting-period conditions, and high-value tests.
+- Never invent policy entries — only return keys/entries the tools confirm.
+- Never calculate co-pays, waiting dates, or approve/reject amounts.
+- Prefer precision: empty lists are better than guesses.
+"""
 
 
-class ClinicalAssessment(BaseModel):
-    """Structured assessment produced by the Clinical Reasoning Agent."""
-
-    exclusions_found: list[str] = Field(default_factory=list)
-    waiting_periods_found: list[str] = Field(default_factory=list)
-    pre_auth_required: list[str] = Field(default_factory=list)
-    summary: str = Field(default="Clinical policy evaluation completed.")
+class ClinicalExclusionFinding(BaseModel):
+    entry: str = Field(..., description="Verbatim policy exclusion entry")
+    evidence: str = Field(default="", description="Document text that triggered the match")
 
 
-def run_clinical_reasoning_agent(
+class ClinicalTaggingResult(BaseModel):
+    conditions: list[str] = Field(default_factory=list)
+    exclusions: list[ClinicalExclusionFinding] = Field(default_factory=list)
+    high_value_tests: list[str] = Field(default_factory=list)
+    summary: str = Field(default="Clinical tagging completed.")
+
+
+def build_clinical_tools(policy: Policy) -> list:
+    @tool
+    def lookup_policy_exclusion(term: str) -> str:
+        """Check whether clinical text matches a policy exclusion."""
+        tags = tag_deterministic(policy, term)
+        if tags.exclusions:
+            matched = tags.exclusions[0]
+            return (
+                f"EXCLUDED: '{term}' matches '{matched.entry}'. "
+                f"Evidence: '{matched.matched_text}'."
+            )
+        return f"COVERED: '{term}' does not match any exclusion."
+
+    @tool
+    def check_condition_waiting_period(condition: str) -> str:
+        """Look up a condition-specific waiting period (key or free text)."""
+        key = condition.strip().lower().replace(" ", "_")
+        days = policy.specific_condition_waiting_days.get(key)
+        if days is not None:
+            return f"WAITING_PERIOD: '{key}' requires {days} days after join."
+        tags = tag_deterministic(policy, condition)
+        if tags.conditions:
+            hits = [
+                f"{c}={policy.specific_condition_waiting_days.get(c)}d"
+                for c in tags.conditions
+            ]
+            return f"MATCHED_CONDITIONS: {', '.join(hits)}"
+        return f"NO_SPECIFIC_WAITING_PERIOD: '{condition}'."
+
+    @tool
+    def verify_high_value_test(test_name: str) -> str:
+        """Check whether a test is a high-value imaging test (MRI/CT/PET)."""
+        matched = match_high_value_test(policy, test_name)
+        if matched:
+            return f"HIGH_VALUE_TEST: '{test_name}' → '{matched}'."
+        return f"NOT_HIGH_VALUE: '{test_name}'."
+
+    @tool
+    def list_waiting_condition_keys() -> str:
+        """List every specific-condition waiting-period key on the policy."""
+        items = [f"{k}={v}d" for k, v in sorted(policy.specific_condition_waiting_days.items())]
+        return "CONDITION_KEYS: " + (", ".join(items) if items else "(none)")
+
+    return [
+        lookup_policy_exclusion,
+        check_condition_waiting_period,
+        verify_high_value_test,
+        list_waiting_condition_keys,
+    ]
+
+
+def _clinical_prompt(docs: list[ExtractedDocument]) -> str:
+    blocks = []
+    for d in docs:
+        items = "; ".join(f"{li.description} (₹{li.amount:,.0f})" for li in d.line_items) or "(none)"
+        blocks.append(
+            f"Document {d.file_id} ({d.doc_type.value}):\n"
+            f"  diagnosis: {d.diagnosis or '(none)'}\n"
+            f"  treatment: {d.treatment or '(none)'}\n"
+            f"  medicines: {', '.join(d.medicines) or '(none)'}\n"
+            f"  tests_ordered: {', '.join(d.tests_ordered) or '(none)'}\n"
+            f"  line_items: {items}"
+        )
+    return (
+        "Tag the following claim documents onto the policy vocabulary. "
+        "Use tools before finalizing.\n\n" + "\n\n".join(blocks)
+    )
+
+
+def enrich_documents_with_clinical_tags(
+    docs: list[ExtractedDocument],
+    result: ClinicalTaggingResult,
+    policy: Policy,
+    trace: TraceRecorder,
+) -> list[ExtractedDocument]:
+    raw = DocumentTags(
+        conditions=list(result.conditions),
+        exclusions=[
+            PolicyTag(entry=e.entry, matched_text=e.evidence or e.entry, via="llm")
+            for e in result.exclusions
+        ],
+    )
+    clean, warnings = validate_llm_tags(raw, policy)
+    for warning in warnings:
+        trace.warn(COMPONENT, warning)
+
+    valid_tests = set(policy.high_value_test_aliases)
+    agent_tests = {t for t in result.high_value_tests if t in valid_tests}
+    for name in result.high_value_tests:
+        if name not in valid_tests:
+            trace.warn(COMPONENT, f"Dropped unknown high-value test tag '{name}'.")
+
+    updated: list[ExtractedDocument] = []
+    for d in docs:
+        line_items = list(d.line_items)
+        for li in line_items:
+            if li.matched_high_value_test is None:
+                matched = match_high_value_test(policy, li.description)
+                if matched in agent_tests:
+                    li.matched_high_value_test = matched
+        merged = merge_tags(clean, d.tags or DocumentTags(), file_id=d.file_id)
+        for warning in merged.warnings:
+            trace.warn(COMPONENT, warning)
+        updated.append(d.model_copy(update={"tags": merged.tags, "line_items": line_items}))
+
+    trace.info(
+        COMPONENT,
+        result.summary
+        or (
+            f"Clinical agent tags merged: conditions={clean.conditions}, "
+            f"exclusions={[e.entry for e in clean.exclusions]}."
+        ),
+        {
+            "conditions": clean.conditions,
+            "exclusions": [e.entry for e in clean.exclusions],
+            "high_value_tests": sorted(agent_tests),
+        },
+    )
+    return updated
+
+
+@traceable(
+    name="ClinicalTaggingAgent",
+    run_type="chain",
+    process_inputs=lambda inputs: {
+        "document_count": len(inputs.get("docs") or []),
+        "has_llm": inputs.get("llm") is not None,
+    },
+)
+def run_clinical_tagging_agent(
     docs: list[ExtractedDocument],
     policy: Policy,
     trace: TraceRecorder,
     llm: LlmClient | None = None,
-) -> ClinicalAssessment:
-    """Execute the Clinical Reasoning Sub-Agent against extracted documents."""
-    assessment = ClinicalAssessment()
-    diagnoses = [d.diagnosis for d in docs if d.diagnosis]
-    treatments = [d.treatment for d in docs if d.treatment]
-    tests = [t for d in docs for t in d.tests_ordered]
-    items = [(li.description, li.amount) for d in docs for li in d.line_items]
-
-    # Tool invocation loop across extracted clinical inputs
-    for term in set(diagnoses + treatments):
-        res = lookup_policy_exclusion.invoke({"term": term})
-        if "EXCLUDED" in res:
-            assessment.exclusions_found.append(res)
-            trace.warn(COMPONENT, f"Tool finding: {res}")
-
-        for cond in policy.specific_condition_waiting_days:
-            if cond in term.lower():
-                wp_res = check_condition_waiting_period.invoke({"condition": cond})
-                assessment.waiting_periods_found.append(wp_res)
-                trace.info(COMPONENT, f"Tool finding: {wp_res}")
-
-    for desc, amt in items:
-        preauth_res = verify_high_value_test_preauth.invoke({"test_name": desc, "amount": amt})
-        if "PRE_AUTH_REQUIRED" in preauth_res:
-            assessment.pre_auth_required.append(preauth_res)
-            trace.warn(COMPONENT, f"Tool finding: {preauth_res}")
-
-    if not (assessment.exclusions_found or assessment.waiting_periods_found or assessment.pre_auth_required):
-        trace.check(COMPONENT, True, "Clinical ReAct Agent verified: all policy tool checks passed.")
-    else:
-        assessment.summary = (
-            f"Clinical findings: {len(assessment.exclusions_found)} exclusion(s), "
-            f"{len(assessment.waiting_periods_found)} waiting period(s), "
-            f"{len(assessment.pre_auth_required)} pre-auth alert(s)."
+) -> list[ExtractedDocument]:
+    if llm is None:
+        trace.skipped(
+            COMPONENT,
+            "No LLM configured — clinical agent skipped; deterministic tags retained.",
         )
-        trace.info(COMPONENT, assessment.summary)
+        return docs
+    if not docs:
+        return docs
 
-    return assessment
+    agent = create_agent(
+        model=llm._chat,
+        tools=build_clinical_tools(policy),
+        system_prompt=SYSTEM_PROMPT,
+        response_format=ClinicalTaggingResult,
+        name="clinical_tagging_agent",
+    )
+    raw = agent.invoke(
+        {"messages": [{"role": "user", "content": _clinical_prompt(docs)}]},
+        config={
+            "run_name": "clinical_tagging_agent",
+            "tags": ["clinical", "agent"],
+            "metadata": {"document_count": len(docs)},
+        },
+    )
+    structured = raw.get("structured_response")
+    if structured is None:
+        trace.warn(COMPONENT, "Clinical agent returned no structured_response; tags unchanged.")
+        return docs
+    if isinstance(structured, dict):
+        structured = ClinicalTaggingResult.model_validate(structured)
+    return enrich_documents_with_clinical_tags(docs, structured, policy, trace)

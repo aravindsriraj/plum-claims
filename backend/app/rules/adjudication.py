@@ -29,7 +29,7 @@ from app.rules.financial import (
     is_network_hospital,
 )
 from app.rules.tagging import is_consultation_fee, match_high_value_test, tag_deterministic
-from app.rules.textnorm import normalize
+from app.rules.textnorm import contains_normalized, normalize
 from app.rules.waiting import check_initial_waiting_period, check_specific_waiting_periods
 from app.util import parse_iso_date
 
@@ -199,7 +199,12 @@ def adjudicate(
     # 9. Line-item adjudication
     line_items = _adjudicate_line_items(claim.claim_category, rules, line_items, trace)
     result.line_items = line_items
-    eligible = sum(li.amount for li in line_items if li.status == LineItemStatus.APPROVED) or claim.claimed_amount if not line_items else sum(li.amount for li in line_items if li.status == LineItemStatus.APPROVED)
+    if not line_items:
+        eligible = claim.claimed_amount
+    else:
+        eligible = sum(
+            li.amount for li in line_items if li.status == LineItemStatus.APPROVED
+        )
     result.eligible_amount = round(eligible, 2)
 
     if line_items and eligible == 0:
@@ -272,16 +277,34 @@ def _adjudicate_line_items(
             is_excluded = normalize(li.matched_policy_item) in excluded
         else:
             desc = normalize(li.description)
-            is_excluded = any(e and (e in desc or desc in e) for e in excluded)
+            # Word-boundary match (same as tagging/network) — avoid accidental
+            # substring hits across unrelated procedure names.
+            is_excluded = any(
+                e and (contains_normalized(desc, e) or contains_normalized(e, desc))
+                for e in excluded
+            )
         if is_excluded:
             li.status = LineItemStatus.REJECTED
             li.approved_amount = 0
-            li.rejection_reason = f"'{li.description}' is in the policy's excluded {category.value.lower()} procedures list."
-            trace.check(COMPONENT, False, f"Line item rejected: '{li.description}' ₹{li.amount:,.0f} — {li.rejection_reason}", li.model_dump())
+            li.rejection_reason = (
+                f"'{li.description}' is in the policy's excluded "
+                f"{category.value.lower()} procedures list."
+            )
+            trace.check(
+                COMPONENT,
+                False,
+                f"Line item rejected: '{li.description}' ₹{li.amount:,.0f} — {li.rejection_reason}",
+                li.model_dump(),
+            )
         else:
             li.status = LineItemStatus.APPROVED
             li.approved_amount = li.amount
-            trace.check(COMPONENT, True, f"Line item approved: '{li.description}' ₹{li.amount:,.0f}.", li.model_dump())
+            trace.check(
+                COMPONENT,
+                True,
+                f"Line item approved: '{li.description}' ₹{li.amount:,.0f}.",
+                li.model_dump(),
+            )
     return line_items
 
 

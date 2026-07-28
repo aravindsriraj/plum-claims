@@ -480,13 +480,34 @@ class TestResilience:
         assert len(trace.failures) == 0
 
 
-# ----------------------------------------------------------- Clinical ReAct Tools
-class TestClinicalTools:
-    def test_clinical_tools_build_correctly(self):
-        from app.agents.tools import get_clinical_tools
-        tools = get_clinical_tools()
-        assert len(tools) == 3
-        tool_names = {t.name for t in tools}
-        assert "lookup_policy_exclusion" in tool_names
-        assert "check_condition_waiting_period" in tool_names
-        assert "verify_high_value_test_preauth" in tool_names
+class TestClinicalTaggingAgent:
+    def test_skipped_without_llm(self):
+        from app.agents.clinical_agent import run_clinical_tagging_agent
+        from app.contracts.documents import DocumentTags, ExtractedDocument
+        from app.contracts.enums import DocumentType, ExtractionMethod
+        from app.observability.trace import TraceRecorder
+        from app.policy.loader import load_policy
+
+        docs = [
+            ExtractedDocument(
+                file_id="F1",
+                doc_type=DocumentType.PRESCRIPTION,
+                method=ExtractionMethod.PROVIDED_CONTENT,
+                diagnosis="Type 2 Diabetes Mellitus",
+                tags=DocumentTags(conditions=["diabetes"]),
+            )
+        ]
+        trace = TraceRecorder()
+        out = run_clinical_tagging_agent(docs, load_policy(), trace, llm=None)
+        assert out[0].tags.conditions == ["diabetes"]
+        assert any("clinical agent skipped" in e.summary.lower() for e in trace.events)
+
+    def test_tools_bind_to_policy(self):
+        from app.agents.clinical_agent import build_clinical_tools
+        from app.policy.loader import load_policy
+
+        tools = build_clinical_tools(load_policy())
+        names = {t.name for t in tools}
+        assert "lookup_policy_exclusion" in names
+        assert "check_condition_waiting_period" in names
+        assert "verify_high_value_test" in names
