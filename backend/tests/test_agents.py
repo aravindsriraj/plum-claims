@@ -480,21 +480,13 @@ class TestResilience:
         assert len(trace.failures) == 0
 
 
-# ----------------------------------------------------------- ReAct Investigation
-class TestReActInvestigation:
-    def test_investigation_tools_build_correctly(self):
-        from app.agents.investigation import build_investigation_tools
-        claim = ClaimInput(
-            member_id="EMP001",
-            policy_id="PLUM_GHI_2024",
-            claim_category=ClaimCategory.CONSULTATION,
-            treatment_date=date(2024, 11, 1),
-            claimed_amount=1500,
-            documents=[doc("F1")],
-        )
-        tools = build_investigation_tools(POLICY, claim)
+# ----------------------------------------------------------- Clinical ReAct Tools
+class TestClinicalTools:
+    def test_clinical_tools_build_correctly(self):
+        from app.agents.tools import get_clinical_tools
+        tools = get_clinical_tools()
         assert len(tools) == 3
         tool_names = {t.name for t in tools}
-        assert "lookup_policy_rules" in tool_names
-        assert "check_member_history" in tool_names
-        assert "verify_provider_network" in tool_names
+        assert "lookup_policy_exclusion" in tool_names
+        assert "check_condition_waiting_period" in tool_names
+        assert "verify_high_value_test_preauth" in tool_names
