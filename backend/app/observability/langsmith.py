@@ -81,6 +81,50 @@ def claim_trace_outputs(outputs: Any) -> Any:
     return outputs
 
 
+def claim_stream_outputs(outputs: Any) -> Any:
+    """process_stream yields many stage events — keep only the final result summary.
+
+    Without this, LangSmith stores the entire NDJSON event list as ProcessClaim
+    `output`, which buries the decision and looks like a broken trace.
+    """
+    if isinstance(outputs, list):
+        stage_events = 0
+        result: dict[str, Any] | None = None
+        for item in outputs:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "stage":
+                stage_events += 1
+            elif item.get("type") == "result" and isinstance(item.get("response"), dict):
+                result = item["response"]
+        if result is not None:
+            decision = result.get("decision") or {}
+            processing = result.get("processing") or {}
+            return {
+                "claim_id": result.get("claim_id"),
+                "status": result.get("status"),
+                "decision": decision.get("decision") if isinstance(decision, dict) else None,
+                "approved_amount": decision.get("approved_amount")
+                if isinstance(decision, dict)
+                else None,
+                "claimed_amount": decision.get("claimed_amount")
+                if isinstance(decision, dict)
+                else None,
+                "document_issue_codes": [
+                    i.get("code") for i in (result.get("document_issues") or []) if isinstance(i, dict)
+                ],
+                "duration_ms": processing.get("duration_ms"),
+                "llm_calls": processing.get("llm_calls"),
+                "degraded": processing.get("degraded"),
+                "stage_events": stage_events,
+                "interrupted": any(
+                    isinstance(i, dict) and i.get("type") == "interrupt" for i in outputs
+                ),
+            }
+        return {"yielded_events": len(outputs), "stage_events": stage_events}
+    return claim_trace_outputs(outputs)
+
+
 def summarize_response(response: ClaimResponse) -> dict[str, Any]:
     decision = response.decision
     return {
@@ -122,7 +166,9 @@ def graph_config(
         metadata.update(extra_metadata)
     return {
         "configurable": {"thread_id": claim_id},
-        "run_name": f"{mode}:{claim_id}",
+        # Stable name so the tree is ProcessClaim → ClaimsGraph → nodes
+        # (not stream:CLM-XXXX which looks like a second root claim).
+        "run_name": "ClaimsGraph",
         "tags": tags,
         "metadata": metadata,
     }
@@ -134,7 +180,8 @@ def annotate_claim_run(response: ClaimResponse) -> None:
     if tree is None:
         return
     summary = summarize_response(response)
-    tree.add_outputs(summary)
+    # Replace outputs rather than merging with generator yield dump.
+    tree.outputs = summary
     tree.add_metadata(
         {
             "claim_id": response.claim_id,
@@ -146,6 +193,7 @@ def annotate_claim_run(response: ClaimResponse) -> None:
             "degraded": summary["degraded"],
         }
     )
+    tree.add_tags(["plum-claims", response.claim_id])
     if summary["decision"]:
         tree.add_tags([summary["decision"], response.status.value])
     else:
@@ -154,6 +202,7 @@ def annotate_claim_run(response: ClaimResponse) -> None:
 
 __all__ = [
     "annotate_claim_run",
+    "claim_stream_outputs",
     "claim_trace_inputs",
     "claim_trace_outputs",
     "configure_langsmith",

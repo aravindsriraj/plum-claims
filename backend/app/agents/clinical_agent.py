@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 
 from app.contracts.documents import DocumentTags, ExtractedDocument, PolicyTag
 from app.llm.client import LlmClient
-from app.observability.langsmith import traceable
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.tagging import match_high_value_test, merge_tags, tag_deterministic, validate_llm_tags
@@ -165,14 +164,6 @@ def enrich_documents_with_clinical_tags(
     return updated
 
 
-@traceable(
-    name="ClinicalTaggingAgent",
-    run_type="chain",
-    process_inputs=lambda inputs: {
-        "document_count": len(inputs.get("docs") or []),
-        "has_llm": inputs.get("llm") is not None,
-    },
-)
 def run_clinical_tagging_agent(
     docs: list[ExtractedDocument],
     policy: Policy,

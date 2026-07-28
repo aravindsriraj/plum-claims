@@ -1,120 +1,147 @@
 # Demo Video Script (8–12 minutes)
 
-Three required assignment segments + live features overview, LangSmith tracing, and intro/outro. Timings are targets.
+Assignment requires **exactly three beats**. Everything else is optional color.
+Timings are targets — stay tight; prefer clear narration over more scenarios.
+
+| Beat | Time | What reviewers must see |
+|------|------|-------------------------|
+| **A** | ~2 min | Document problem → early stop → **specific** error message |
+| **B** | ~4–5 min | Clean approval end-to-end → **full audit trace** visible |
+| **C** | ~3 min | One decision you’re **proud of** + one you’d **change** with more time |
+
+Live UI: https://claims-ui-968299856642.asia-south1.run.app  
+API health: https://claims-api-968299856642.asia-south1.run.app/health  
+Design line to repeat: **“LLMs for perception, code for judgment.”**
 
 ---
 
-## 0. Intro (0:00–1:00)
+## 0. Intro (0:00–0:45)
 
-- **Greeting & Overview:**
-  > *"Hi, I'm presenting Plum's AI Claims Processing System. This application automates health insurance claims processing end-to-end: verifying uploaded medical documents, extracting structured clinical/billing data with vision models, and executing deterministic policy adjudication with full auditability."*
+> *“Hi — this is Plum’s AI claims processing system. Members upload medical documents; we verify them early, extract with Gemini vision, then decide APPROVED / PARTIAL / REJECTED / MANUAL_REVIEW against `policy_terms.json`. Vision and tagging are LLM perception. Waiting periods, co-pays, and limits are deterministic Python — never the model.”*
 
-- **Live Links & Architecture:**
-  - Show the deployed UI: [https://claims-ui-968299856642.asia-south1.run.app](https://claims-ui-968299856642.asia-south1.run.app)
-  - Show the live backend API health check.
-  - Call out the core design philosophy:
-    > **"LLMs for Perception, Code for Judgment."**
-    > *"Gemini 3.6 Flash handles vision OCR, classification, and identity reconciliation, but every rupee, co-pay calculation, waiting period, and sub-limit is pure, deterministic Python driven by `policy_terms.json`."*
+- Open the live UI (or localhost:3000).
+- Optional one-liner: show `/health` → `llm_configured: true`.
 
 ---
 
-## 1. Segment A — Early Stop on Document Problems (1:00–3:15)
+## 1. Beat A — Early stop on a document problem (0:45–2:45)
 
-**Scenario:** TC001 — Member uploads two prescriptions for a CONSULTATION claim that requires a hospital bill.
+**Goal:** Prove requirement #2 — stop before adjudication, with a member-actionable message.
 
-1. **Submit Invalid Submission:**
-   - In the UI, select member **EMP001 (Rajesh Kumar)**, Category **CONSULTATION**, Treatment Date **2024-11-01**, Claimed Amount **₹1,500**.
-   - Upload `prescription_rajesh.jpg` twice (one copy named `another_prescription.jpg`).
-   - Click **Submit Claim**.
+**Scenario (TC001):** CONSULTATION needs a hospital bill; member uploads two prescriptions.
 
-2. **Highlight Actionable Early Rejection:**
-   - Show the UI stopping immediately at stage 1 with status **`DOCUMENT_REJECTED`**.
-   - Read the exact error message:
-     > *"[MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'prescription_rajesh.jpg' (PRESCRIPTION) and 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue."*
-   - Point out:
-     - No claim decision was made (`decision: None`).
-     - The message specifically names what was provided and what is required next.
-     - The trace clearly shows execution halted before any extraction or adjudication ran.
+1. Fill the form:
+   - Member: **EMP001 — Rajesh Kumar**
+   - Category: **CONSULTATION**
+   - Treatment date: **2024-11-01**
+   - Claimed amount: **1500**
+   - Documents: `prescription_rajesh.jpg` **twice** (rename one copy to `another_prescription.jpg` so both filenames show in the error)
 
-3. **Optional 30s Variant (Blurry Upload):**
-   - Upload `blurry_bill.jpg` for a Pharmacy claim.
-   - Show code **`UNREADABLE_DOCUMENT`**: *"The claim is NOT rejected; we prompt the member to re-upload a clearer photo of that specific file."*
+2. Click **Submit claim**. Watch the live checklist — processing should stop after document read/verify (no full adjudication path).
 
----
+3. On camera, read the status **`DOCUMENT_REJECTED`** and the exact issue text, e.g.:
+   > *`[MISSING_DOCUMENT]` … consultation claim requires a hospital bill, but you uploaded … (PRESCRIPTION) … Please upload your hospital bill …*
 
-## 2. Segment B — Successful End-to-End Approval & Audit Trace (3:15–7:00)
+4. Call out three things in one breath:
+   - Message names **what was uploaded** and **what to upload next** (not a generic failure).
+   - **`decision` is empty** — we never paid or rejected the claim on policy rules.
+   - Trace shows the pipeline **halted at document verification**, before money rules ran.
 
-**Scenario:** Clean Consultation Claim — upload `prescription_rajesh.jpg` + `bill_rajesh.jpg`, EMP001, CONSULTATION, ₹1,500.
-
-1. **Submit & Highlight Live Streamed Progress:**
-   - Click **Submit Claim** and highlight the live 6-stage checklist (`ProgressChecklist.tsx`):
-     - `Verifying documents` $\rightarrow$ `Reading documents` $\rightarrow$ `Cross-checking details` $\rightarrow$ `Applying policy rules` $\rightarrow$ `Fraud screening` $\rightarrow$ `Finalizing decision`
-   - Point out: The backend uses an HTTP NDJSON stream (`POST /claims/stream`) so the UI updates live in real-time as each LangGraph node finishes.
-
-2. **Walk Through the Decision Card:**
-   - **Outcome:** `APPROVED` — ₹1,350 approved out of ₹1,500.
-   - **Financial Breakdown:** 10% co-pay applied = ₹150 member share.
-   - **LLM Call Efficiency:** Point out `LLM calls: 3` (1 single vision read per doc + 1 prose polish pass, down from 2N calls).
-   - **Empathetic Member Message:** Read the warm, polished prose generated by Gemini Flash:
-     > *"We are pleased to share that your claim has been approved. Out of the ₹1,500 submitted, ₹1,350 will be paid."*
-     - Point out the safety rail: Python regex verifies that **all numbers/amounts survive verbatim** before displaying the LLM's message.
-
-3. **Scroll the Full Audit Trace:**
-   - Walk through the numbered execution events:
-     1. `DocumentVerificationAgent`: Both documents classified with high confidence and raw reads stashed.
-     2. `ExtractionAgent`: Extracted diagnosis, treatment, and line items.
-     3. `CrossValidationAgent`: Patient name matched roster; LLM second opinion (`LlmNameVerdict`) cleared minor name variations.
-     4. `AdjudicationEngine`: Evaluated member validity, waiting periods, exclusions, pre-auth, and sub-limits with `PASS`.
-     5. `FraudAgent`: Checked same-day and monthly claim velocity (no signals).
-     6. `DecisionSynthesizer`: Formulated final approval and computed `0.98` confidence score.
-
-4. **Show Network Hospital Adjustment (Optional 30s Variant):**
-   - Enter hospital "Apollo Hospitals" with ₹4,500 claim amount.
-   - Show the exact financial sequence: **Network Discount (10% off: ₹4,500 $\rightarrow$ ₹4,050)** applied BEFORE **Co-pay (10% member share: ₹4,050 $\rightarrow$ ₹3,645)**.
+**Optional 20s (only if time):** swap in `blurry_bill.jpg` → `UNREADABLE_DOCUMENT` (“re-upload a clearer photo”) — still early stop, still actionable.
 
 ---
 
-## 3. Segment C — LangSmith Tracing, Engineering Pride & Trade-offs (7:00–10:30)
+## 2. Beat B — Successful end-to-end approval + full trace (2:45–7:30)
 
-1. **Show Live LangSmith Observability Dashboard (NEW):**
-   - Switch to the browser tab showing **https://smith.langchain.com** (Project: `plum-claims`).
-   - Open the trace for the claim just executed.
-   - Show the nested tree: `ProcessClaim` root chain $\rightarrow$ LangGraph state graph nodes (`verify_documents`, `extract_documents`, `adjudicate`, `fraud_check`, `synthesize_decision`) $\rightarrow$ Gemini LLM API calls with input/output token metrics and latencies.
-   - Call out: *"Every single run in production is fully observable in LangSmith with complete input/output payloads and latency tracking."*
+**Goal:** Prove requirements #3–#5 — extract, decide, explain.
 
-2. **Technical Decision I'm Proud Of (Resilience & Graceful Degradation):**
-   - In the UI, check **"Simulate a component failure"** (forces cross-validation node to fail via fault-injection) and submit.
-   - Show the result:
-     - The claim **does not crash** or return a 500 server error.
-     - Status remains `DECIDED`, but a **Degraded Processing Warning** banner appears.
-     - Confidence automatically drops from `0.98` $\rightarrow$ `0.73`.
-     - An advisory note recommends manual review.
-   - Highlight: *"Confidence is computed from observable data quality and component health — never an LLM grading its own homework."*
+**Scenario (clean consultation / TC004-style):** EMP001, CONSULTATION, ₹1,500, documents `prescription_rajesh.jpg` + `bill_rajesh.jpg`.
 
-3. **What I Would Change Given More Time:**
-   - *"Currently, document processing runs sequentially inside a graph node. Given more time, I would leverage LangGraph's `Send` API to fan-out document vision processing in parallel across multiple worker nodes, reducing latency by 3x on multi-document claims."*
-   - *"I would also compile the LangGraph with a persistent PostgreSQL checkpointer (`PostgresSaver`) to enable Human-in-the-Loop (`interrupt()`) pause-and-resume workflows when a claim is flagged for manual review."*
-   - *"Proud of cutting a dead 'clinical ReAct' node that re-ran policy lookups without affecting decisions — keeping the multi-agent story honest: perception agents + deterministic judgment."*
+1. **Submit and show live progress** (NDJSON stream → checklist):
+   - Reading documents → Verifying document set → Clinical policy tagging → Cross-checking details → Applying policy rules → Fraud screening → Finalizing decision → Human review  
+   - One line: *“Each checkbox is a real LangGraph node finishing — not a fake spinner.”*
+
+2. **Decision card — say the numbers out loud:**
+   - Outcome: **`APPROVED`**
+   - **₹1,350** of **₹1,500** (10% co-pay → ₹150 member share)
+   - Point at **LLM call count** (vision reads + optional polish) — perception cost is visible, judgment is code
+   - Read the **member message**; note the safety rail: polished prose is rejected if any ₹ / % / date from the template is missing
+
+3. **Scroll the audit trace slowly** (this is the money shot for Observability):
+   Walk 5–6 concrete lines, not every event:
+   1. Documents classified (PRESCRIPTION + HOSPITAL_BILL) with confidence / quality  
+   2. Extraction: diagnosis, line items, amounts  
+   3. Clinical tagging / cross-check: roster name match (and any soft warnings)  
+   4. Adjudication checks: waiting period, exclusions, sub-limits, co-pay — all **PASS** with reasons  
+   5. Fraud: no velocity signals  
+   6. Synthesizer: **APPROVED**, confidence score, approved amount  
+
+   Closing line for this beat:
+   > *“Ops can reconstruct this claim from the trace alone — no black box.”*
+
+**Optional 30s (only if ahead of time):** set hospital to **Apollo Hospitals**, amount **4500** — show network discount **before** co-pay in the adjustments list (TC010 ordering).
+
+**Optional 30s:** flip to LangSmith project `plum-claims`, open this run’s **`ProcessClaim`** tree (graph nodes → `GeminiStructured` / `ClinicalTaggingAgent`). Nice for Observability weight — not a substitute for the in-UI trace.
 
 ---
 
-## 4. Outro (10:30–11:00)
+## 3. Beat C — Proud of / would change (7:30–11:00)
 
-- **Reproducibility & Quality Assurance:**
-  - Show the terminal running Pytest: **56/56 unit tests passed**.
-  - Show the Eval Report (`docs/EVAL_REPORT.md`): **12/12 test cases passed (100% accuracy)** locally and against Cloud Run.
-  - Closing statement:
-    > *"All code is available on GitHub with Docker Compose instructions, complete component contracts, architecture docs, and 100% eval coverage. Thank you!"*
+### Proud of — show it, don’t only talk about it
+
+**Pick one (recommended: graceful degradation — assignment requirement #6):**
+
+1. Same clean claim form; check **“Simulate a component failure”**; submit.
+2. Show on screen:
+   - Still **`DECIDED` / APPROVED** (or decided outcome) — **no 500**
+   - **Degraded** flag / warning in the response
+   - **Confidence drops** vs the clean run
+   - Trace records the component failure + fallback used
+3. Narrate:
+   > *“I’m proud that confidence comes from observable failures and document quality — not an LLM grading itself. If cross-validation dies, we continue with what we have and tell ops the run was degraded.”*
+
+**Alternate pride line (if you prefer architecture over the fault-injection demo):**
+> *“Proud of the hard split: Gemini and the clinical tool-calling agent only tag and extract; every rupee and waiting-period date is pure Python on `policy_terms.json`. That keeps evals deterministic and decisions explainable.”*
+
+### Would change given more time — one concrete next step
+
+Be honest about what already exists (don’t promise work you’ve already shipped):
+
+> *“HITL already pauses `MANUAL_REVIEW` with LangGraph `interrupt()` when `CLAIMS_HITL` is on, but the checkpointer is in-memory. At 10× load across multiple Cloud Run replicas I’d swap in `PostgresSaver` so a paused claim can resume on any instance, and add a reflection retry when extraction confidence is low before we ask the member to re-upload.”*
+
+Do **not** say you’d “add parallel document workers” — **`Send` fan-out is already live.**
 
 ---
 
-### Pre-flight Checklist for Video Recording
+## 4. Outro (11:00–11:30)
 
-- [ ] Local server running OR live Cloud Run URL loaded ([https://claims-ui-968299856642.asia-south1.run.app](https://claims-ui-968299856642.asia-south1.run.app))
-- [ ] LangSmith Dashboard open in browser tab: `https://smith.langchain.com` (Project: `plum-claims`)
-- [ ] Mock documents generated and ready in `scripts/mock_docs`:
-  - `prescription_rajesh.jpg`
-  - `another_prescription.jpg` (copy for Segment A)
-  - `bill_rajesh.jpg`
-- [ ] Browser zoom set to **120%** for clear screen recording
-- [ ] `docs/EVAL_REPORT.md` open in editor or browser tab
+> *“Reproducibility: **63 unit tests**, **12/12** assignment evals in `docs/EVAL_REPORT.md`. Code on GitHub with Docker Compose and Cloud Run. Thanks.”*
+
+Flash `docs/EVAL_REPORT.md` or a terminal `pytest` / eval summary if it fits in 15 seconds.
+
+---
+
+## Pre-flight checklist
+
+- [ ] UI loaded (Cloud Run or `docker compose up`) — cold start may take ~5–10s on first request
+- [ ] Mock docs ready (`scripts/generate_mock_docs.py` → `scripts/mock_docs/`):
+  - [ ] `prescription_rajesh.jpg`
+  - [ ] `another_prescription.jpg` (copy of prescription for Beat A)
+  - [ ] `bill_rajesh.jpg`
+  - [ ] Optional: `blurry_bill.jpg`
+- [ ] Browser zoom ~120%; mic check; hide bookmarks bar
+- [ ] Tabs ready: UI | (optional) LangSmith `plum-claims` | EVAL_REPORT or terminal
+- [ ] Practice Beat A error message once so you can read it without scrolling mid-sentence
+- [ ] Know your Beat C “proud” demo (fault-injection checkbox) and the exact “would change” sentence above
+
+---
+
+## Timing guardrails
+
+| If you’re over time | Cut first |
+|---------------------|-----------|
+| > 12 min | Optional blurry doc, Apollo network variant, LangSmith tab |
+| Still long | Shorten Beat B trace to **four** events |
+| Under 8 min | Add Apollo network ordering **or** 20s LangSmith tree |
+
+**Do not skip:** specific document error (A), approval numbers + scrolled trace (B), on-camera proud demo + one change (C).

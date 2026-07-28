@@ -55,9 +55,11 @@ Union-merge; disagreements become trace warnings. Adjudication consumes tags onl
 ## Observability
 
 LangSmith project `plum-claims`. Each claim is one parent run (`ProcessClaim` for
-sync/stream, `ResumeClaim` for HITL) with nested LangGraph node spans,
-`GeminiStructured` LLM calls, and `ClinicalTaggingAgent` tool loops. Runs are
-tagged with `claim_id`, member, category, and final decision for search.
+sync/stream, `ResumeClaim` for HITL) with nested `ClaimsGraph` → node spans,
+`GeminiStructured` LLM calls, `clinical_tagging_agent` tool loops, and
+`MemberMessagePolish`. Upload bytes stay in the runtime registry (not graph
+state) so spans stay small. Parent outputs summarize the decision — stream
+stage events are not dumped into the root run.
 
 ## Streaming
 

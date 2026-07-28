@@ -85,9 +85,9 @@ def fan_out_documents(state: ClaimGraphState) -> list[Send]:
 
 def document_worker_node(state: ClaimGraphState) -> dict:
     """Worker: read + extract one document."""
-    doc = state["document"]
     claim = state["claim"]
     rt = get_runtime(state["claim_id"])
+    doc = rt.hydrate_document(state["document"])
 
     def read():
         return read_document(doc, rt.llm, rt.policy, claim.claim_category)

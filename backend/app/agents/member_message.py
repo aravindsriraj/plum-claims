@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.llm.client import LlmClient
 from app.llm.prompts import MEMBER_MESSAGE_PROMPT
+from app.observability.langsmith import traceable
 from app.observability.trace import TraceRecorder
 
 COMPONENT = "MemberMessagePolisher"
@@ -30,6 +31,11 @@ class LlmMemberMessage(BaseModel):
     message: str = Field(..., description="The rewritten member-facing message")
 
 
+@traceable(
+    name="MemberMessagePolish",
+    run_type="chain",
+    process_inputs=lambda inputs: {"template_preview": (inputs.get("template") or "")[:240]},
+)
 def polish_member_message(
     template: str, llm: LlmClient | None, trace: TraceRecorder
 ) -> str:

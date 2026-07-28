@@ -17,10 +17,11 @@ from app.contracts.enums import ClaimStatus, Decision
 from app.contracts.inputs import ClaimInput
 from app.contracts.responses import ClaimResponse, ProcessingMeta
 from app.graph.pipeline import build_graph
-from app.graph.runtime import ClaimRuntime, clear_runtime, register_runtime
+from app.graph.runtime import ClaimRuntime, clear_runtime, register_runtime, stash_document_bytes
 from app.llm.client import LlmClient
 from app.observability.langsmith import (
     annotate_claim_run,
+    claim_stream_outputs,
     claim_trace_inputs,
     claim_trace_outputs,
     graph_config,
@@ -100,10 +101,20 @@ class ClaimService:
         self._traces[claim_id] = trace
         self._started[claim_id] = started
         self._llm_baseline[claim_id] = llm_before
-        register_runtime(claim_id, ClaimRuntime(policy=self._policy, llm=self._llm, trace=trace))
+        # Keep upload bytes in runtime — not in checkpointed / LangSmith graph state.
+        claim_for_graph, blobs = stash_document_bytes(claim)
+        register_runtime(
+            claim_id,
+            ClaimRuntime(
+                policy=self._policy,
+                llm=self._llm,
+                trace=trace,
+                document_blobs=blobs,
+            ),
+        )
         member = self._policy.find_member(claim.member_id)
         return claim_id, trace, started, llm_before, {
-            "claim": claim,
+            "claim": claim_for_graph,
             "claim_id": claim_id,
             "member_name": member.name if member else claim.member_id,
             "hitl_enabled": self._hitl,
@@ -141,6 +152,7 @@ class ClaimService:
         name="ProcessClaim",
         run_type="chain",
         process_inputs=claim_trace_inputs,
+        process_outputs=claim_stream_outputs,
     )
     def process_stream(self, claim: ClaimInput) -> Iterator[dict]:
         claim_id, trace, started, llm_before, initial = self._prepare(claim)
