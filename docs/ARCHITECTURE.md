@@ -19,8 +19,8 @@ into two kinds:
 
 | Kind of work | Examples | Owner |
 |---|---|---|
-| **Perception** (fuzzy, unstructured) | Is this photo a prescription or a bill? What does this handwritten Rx say? Is this scan readable? | LLM agents (Gemini vision) |
-| **Judgment** (exact, accountable) | Waiting-period date math, co-pay calculation, sub-limits, exclusions, per-claim limits, the final decision | Deterministic Python rules engine |
+| **Perception** (fuzzy, unstructured) | Is this photo a prescription or a bill? What does this handwritten Rx say? Is this scan readable? Does "high sugar" mean diabetes? Does this treatment fall under a policy exclusion? | LLM agents (Gemini vision) |
+| **Judgment** (exact, accountable) | Waiting-period date math, co-pay calculation, sub-limits, what to DO with an exclusion, per-claim limits, the final decision | Deterministic Python rules engine |
 
 Anything that touches money, dates, or policy logic is **pure code driven by
 `policy_terms.json`** — never an LLM output, never hardcoded. This is why the
@@ -28,6 +28,52 @@ system is reliable: an LLM can misread a document (and confidence drops
 accordingly), but it cannot miscalculate a co-pay, because it never calculates
 one. Every eval case that pins exact arithmetic (TC004 ₹1,350, TC010 ₹3,240)
 is decided by table-driven, unit-tested pure functions.
+
+## Semantic tagging: how clinical text meets the policy
+
+Mapping free-text diagnoses to policy concepts ("Type 2 Diabetes Mellitus" →
+the `diabetes` waiting-period condition; "bariatric consultation" → an
+exclusion) is perception — it lives OUTSIDE the rule engine. The flow:
+
+```
+clinical text ──▶ tags (conditions, exclusions, procedure matches)
+                     │
+        two independent producers, UNION-merged:
+        1. deterministic matcher — word-boundary aliases from
+           policy_terms.json (matching_aliases). Precision floor;
+           the ONLY tagger in provided-content/eval mode.
+        2. the vision LLM — returns tags in the same structured read;
+           validated against the policy vocabulary (hallucinated
+           entries dropped + flagged), adding recall for phrasings
+           no alias anticipates.
+                     │
+        disagreements → trace warnings, never silently resolved
+                     ▼
+        AdjudicationEngine consumes tags only — set membership,
+        never raw-text matching. Every tag records provenance
+        (via: deterministic | llm | both) for the audit trail.
+```
+
+Two properties worth noting:
+
+- **The vocabulary has ONE home.** Alias tables live in `policy_terms.json`,
+  not in code — edit the JSON and both taggers change behavior together.
+  The loader pre-normalizes aliases once; per-claim matching normalizes each
+  document text once.
+- **The LLM is never trusted blindly.** Its tags are whitelist-checked
+  against actual policy entries before use; the deterministic matcher runs
+  as an independent cross-check in vision mode, and as the sole tagger in
+  eval mode — so evals exercise exactly the production fallback path.
+
+## One vision read per document (2N → N LLM calls)
+
+Real uploads are read exactly ONCE: the DocumentVerificationAgent's vision
+call returns a single structured output (`LlmDocumentRead`) covering
+classification (type, quality), extraction (fields, line items), and policy
+tags. The raw read is stashed in graph state; the ExtractionAgent shapes it
+into an `ExtractedDocument` without a second call. A 2-document claim costs
+2 LLM calls, not 4; the stages stay logically separate — verification still
+judges document sufficiency, extraction still owns the structured record.
 
 ## System overview
 
@@ -78,18 +124,21 @@ synthesize_decision ────────▶ END (status: DECIDED, decision +
 
 ### Component responsibilities
 
-1. **DocumentVerificationAgent** — Classifies every upload (type, quality,
-   patient name) via Gemini vision for real files, or simulation metadata in
-   eval mode. Validates the set against `document_requirements` in the policy.
+1. **DocumentVerificationAgent** — Reads every upload ONCE via Gemini vision
+   (classification + extraction + policy tags in a single structured output —
+   see "One vision read per document"), or simulation metadata in eval mode.
+   Validates the set against `document_requirements` in the policy.
    Any problem produces a specific, member-actionable issue ("'another_
    prescription.jpg' is a prescription, but we still need your hospital bill")
    and the pipeline stops *before any claim decision*. This is a hard
    assignment requirement (TC001–TC003) and 10% of the grade.
 
-2. **ExtractionAgent** — Per document, produces a validated `ExtractedDocument`
-   (patient, doctor + registration, diagnosis, line items, totals, per-field
-   unreadable flags). Two input modes — vision and provided-content — converge
-   on the same Pydantic schema, so downstream code can't tell them apart.
+2. **ExtractionAgent** — Per document, produces a validated, tagged
+   `ExtractedDocument` (patient, doctor + registration, diagnosis, line
+   items, totals, per-field unreadable flags, semantic tags). Two input
+   modes — vision (shaped from the verification read, LLM tags validated +
+   merged) and provided-content (deterministically tagged) — converge on the
+   same Pydantic schema, so downstream code can't tell them apart.
    Illegible fields are flagged, never guessed.
 
 3. **CrossValidationAgent** — Consistency *across* documents: patient identity,
@@ -160,6 +209,19 @@ keeps the eval suite deterministic and fast (no LLM calls, reproducible CI),
 while **vision mode** handles real uploads in the UI. Same schema, same
 downstream code, zero special-casing in adjudication.
 
+## Live progress streaming
+
+`POST /claims/stream` replays the SAME pipeline via
+`graph.stream(stream_mode="updates")`, emitting one NDJSON event per node
+(`{"type":"stage","stage","label","status","summary"}`) and a final
+`{"type":"result","response"}` event whose payload is identical to
+`POST /claims` (asserted byte-equal in tests). Each stage summary quotes the
+actual trace line the node just produced — the progress UI is the pipeline
+narrating itself, never a simulated stepper. The frontend reads the stream
+over the same POST with a fetch reader and renders a six-stage checklist;
+if the stream cannot be opened it falls back to the plain POST. Early
+document rejection simply ends the stream after stage 1.
+
 ## Key interpretation decisions (documented assumptions)
 
 1. **Per-claim limit scope.** The policy has both a blanket `per_claim_limit`
@@ -198,14 +260,15 @@ Current limitations, honestly:
 1. **Stateless = no history.** Claim history in the UI is browser-local; the
    fraud agent consumes caller-supplied history. Fine for a demo, wrong for
    production.
-2. **Synchronous processing.** A claim with 5 documents makes ~10 sequential
-   LLM calls inside one HTTP request (~15–30s with vision).
+2. **Synchronous processing.** A claim with 5 documents makes 5 sequential
+   LLM calls inside one HTTP request (~10–20s with vision). The progress
+   stream keeps the member informed meanwhile; true async is below.
 3. **Single-region, min-instances 0.** First request after idle pays a cold
    start (~5–10s).
 4. **Extraction is per-document sequential.** Parallelizable today.
-5. **Exclusion/condition matching is alias-based.** Good precision on known
-   phrasings; novel phrasings need the (already-scaffolded) LLM semantic pass
-   or learned matching.
+5. **Deterministic matching is alias-based.** Novel phrasings beyond the
+   alias tables are caught only in vision mode (LLM recall); simulation mode
+   has no semantic net. Alias tables are curated, not learned.
 
 At 10x load (750k claims/year ≈ 2k/day, bursts much higher):
 
@@ -224,9 +287,10 @@ At 10x load (750k claims/year ≈ 2k/day, bursts much higher):
   so the API never proxies multi-MB files.
 - **Min-instances ≥ 1 + concurrency tuning** on Cloud Run; LLM provider
   rate-limit handling with token-bucket backoff.
-- **Semantic layer for medical text.** Replace alias tables with embedding
-  similarity + curated synonym store, evaluated against a labeled set;
-  keep the deterministic layer as a high-precision first pass.
+- **Semantic layer for medical text.** The hybrid tagger (LLM recall +
+  deterministic floor) is in place; at scale, add embedding similarity +
+  a curated synonym store feeding the SAME tag contracts, evaluated against
+  a labeled set. The deterministic layer stays as the high-precision floor.
 - **Human review console.** MANUAL_REVIEW decisions already carry structured
   signals; at scale this becomes a first-class queue UI, and reviewer
   outcomes feed back as labeled data.
@@ -240,18 +304,20 @@ plum-claims/
 │   │   ├── contracts/      # Pydantic schemas = component contracts
 │   │   ├── policy/         # Policy loader (single source of truth)
 │   │   ├── rules/          # Deterministic: adjudication, financial, fraud,
-│   │   │                   #   waiting periods, exclusions, conditions
-│   │   ├── agents/         # LLM-facing: verification, extraction,
-│   │   │                   #   cross-validation; + decision, explanation
+│   │   │                   #   waiting periods, tagging (semantic matching)
+│   │   ├── agents/         # LLM-facing: verification (single read),
+│   │   │                   #   extraction, cross-validation; + decision,
+│   │   │                   #   explanation
 │   │   ├── graph/          # LangGraph state + pipeline topology
 │   │   ├── observability/  # Trace recorder, confidence model, resilience
 │   │   ├── llm/            # Gemini client (the only model-touching module)
 │   │   ├── service.py      # Application boundary (used by API and evals)
 │   │   └── main.py         # FastAPI app
-│   ├── tests/              # pytest — 20 tests, real policy, no mocks
+│   ├── tests/              # pytest — 48 tests, real policy, no mocks
 │   ├── evals/run_evals.py  # 12-case eval → docs/EVAL_REPORT.md
 │   └── data/               # policy_terms.json, test_cases.json
-├── frontend/               # Next.js 15: form, decision card, trace viewer
+├── frontend/               # Next.js 15: form, live progress checklist,
+│                           #   decision card, trace viewer
 ├── scripts/                # Mock document generator (demo assets)
 └── docs/                   # This file, CONTRACTS.md, EVAL_REPORT.md
 ```

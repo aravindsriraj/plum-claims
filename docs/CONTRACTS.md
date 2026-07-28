@@ -21,14 +21,16 @@ Conventions:
 | | |
 |---|---|
 | **Input** | `category: ClaimCategory`; `member_name: str`; `documents: list[DocumentInput]`; `policy: Policy`; `llm: LlmClient \| None` |
-| **Output** | `(classified: list[ClassifiedDocument], issues: list[DocumentIssue])` — one `ClassifiedDocument` per input document, in order |
-| **Raises** | `RuntimeError` if a document needs vision classification but no LLM client is configured |
+| **Output** | `(classified: list[ClassifiedDocument], issues: list[DocumentIssue], reads: dict[str, LlmDocumentRead])` — one `ClassifiedDocument` per input document, in order; `reads` carries the raw vision read per file_id for the ExtractionAgent (empty in simulation mode) |
+| **Raises** | `RuntimeError` if a document needs a vision read but no LLM client is configured |
 
 Behavior contract:
 
-1. Each document is classified into `detected_type ∈ DocumentType`,
-   `quality ∈ {GOOD, LOW, UNREADABLE}`, optional `patient_name_on_doc`.
-   Real files → vision model; simulation metadata → used directly.
+1. Each real upload is read ONCE by the vision model via a single structured
+   output (`LlmDocumentRead`): classification (`doc_type`, `quality`,
+   `classification_confidence`), extraction fields, and policy-vocabulary
+   tags (`matched_conditions`, `matched_exclusions`). Simulation metadata →
+   used directly, no LLM call.
 2. Emits a `DocumentIssue` for each of:
    - `UNREADABLE_DOCUMENT` — quality UNREADABLE; message names the file and
      asks for a re-upload of that specific document; never rejects the claim.
@@ -50,22 +52,30 @@ Behavior contract:
 
 | | |
 |---|---|
-| **Input** | `documents: list[DocumentInput]`; `classified: list[ClassifiedDocument]`; `llm: LlmClient \| None` |
+| **Input** | `documents: list[DocumentInput]`; `classified: list[ClassifiedDocument]`; `policy: Policy`; `llm_reads: dict[str, LlmDocumentRead] \| None` |
 | **Output** | `list[ExtractedDocument]` (may be shorter than input if documents failed) |
-| **Raises** | `RuntimeError` if vision extraction is needed but no LLM client is configured; LLM timeout/validation errors propagate to the resilience wrapper |
+| **Raises** | `RuntimeError` if a vision-mode document has no stashed read (verification reads every upload exactly once) |
 
 Behavior contract:
 
-1. Mode selection per document: `file_content_base64` present → vision;
-   `content` present → provided-content normalization; otherwise metadata-only
-   shell with `overall_confidence = 0.5`.
+1. Mode selection per document: `file_content_base64` present → shape the
+   stashed vision read (no second LLM call); `content` present →
+   provided-content normalization; otherwise metadata-only shell with
+   `overall_confidence = 0.5`.
 2. Output fields mirror the source document: `patient_name`, `doctor_name`,
    `doctor_registration`, `provider_name`, `document_date`, `diagnosis`,
    `treatment`, `medicines[]`, `tests_ordered[]`, `line_items[]`,
    `total_amount`, `overall_confidence`, `unreadable_fields[]`.
-3. Never invents values: illegible fields are null + listed in
+3. Every document is tagged (`ExtractedDocument.tags`): clinical text mapped
+   onto the policy vocabulary. Provided-content mode → deterministic matcher.
+   Vision mode → LLM tags whitelist-validated against the policy (hallucinated
+   entries dropped + warned) then union-merged with the deterministic matcher;
+   disagreements become trace warnings.
+4. Never invents values: illegible fields are null + listed in
    `unreadable_fields`, and `overall_confidence` drops proportionally.
-4. Never assesses coverage, exclusions, or limits.
+5. Never assesses coverage, exclusions, or limits — it only TAGS.
+6. Content-key convention: `provider_name` is canonical; `hospital_name` is
+   accepted as a deprecated alias.
 
 ---
 
@@ -203,8 +213,27 @@ Deterministic templating only; no LLM.
 | Endpoint | Input | Output | Errors |
 |---|---|---|---|
 | `POST /claims` | `ClaimInput` JSON | `ClaimResponse` (200 always for processable claims, including REJECTED/DOCUMENT_REJECTED) | 422 on schema validation failure (malformed input) |
+| `POST /claims/stream` | `ClaimInput` JSON | NDJSON (`application/x-ndjson`): one `{"type":"stage","stage","label","status","summary"?}` event per pipeline node, then a final `{"type":"result","response": ClaimResponse}` event. The result payload is identical to `POST /claims` | 422 as above |
 | `GET /health` | — | `{status, llm_configured}` | — |
 
 Note: a claim that is *rejected* is a successful 200 — rejection is a
 business outcome, not an HTTP error. 4xx/5xx is reserved for malformed
 requests and infrastructure failures.
+
+Stream event details: the first event is always
+`{"type":"stage","stage":"verify_documents","status":"running"}`; each node
+then emits a `done` event (with `summary` quoting the node's last real trace
+line) followed by the next node's `running` event. An early document
+rejection ends the stream after `verify_documents` + the result event.
+
+## 11. Semantic tagging (app/rules/tagging.py)
+
+| | |
+|---|---|
+| `tag_deterministic(policy, *texts)` | `DocumentTags{conditions[], exclusions[]}` via word-boundary alias matching; aliases come from `policy_terms.json → matching_aliases`, pre-normalized by the loader |
+| `validate_llm_tags(raw, policy)` | `(clean_tags, warnings)` — drops LLM tags that are not verbatim policy keys/entries |
+| `merge_tags(llm, det, file_id)` | `TagMergeResult{tags, warnings}` — union; corroborated exclusions marked `via="both"`; asymmetric coverage → warnings |
+
+`PolicyTag{entry, matched_text, via}` — `via ∈ deterministic | llm | both`.
+`ExtractedDocument.tags` is `None` only when a document was built outside
+the pipeline (adjudication then tags it deterministically on the spot).
