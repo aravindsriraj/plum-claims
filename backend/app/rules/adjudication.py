@@ -75,13 +75,17 @@ def _all_line_items(docs: list[ExtractedDocument]) -> list[LineItem]:
 
 
 def _provider_name(claim: ClaimInput, docs: list[ExtractedDocument]) -> str | None:
-    """Provider name: explicit submission field wins, else from any document."""
-    if claim.hospital_name:
-        return claim.hospital_name
+    """Provider name for network-discount purposes.
+
+    Documents (the bill's letterhead) are evidence and win over the claim
+    form; the form's hospital_name is a hint used only when no document
+    carries a provider. Any disagreement between the two is flagged by the
+    CrossValidationAgent.
+    """
     for d in docs:
         if d.provider_name:
             return d.provider_name
-    return None
+    return claim.hospital_name
 
 
 def adjudicate(

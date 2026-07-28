@@ -194,6 +194,26 @@ class TestCrossValidation:
         warnings = cross_validate(self.make_claim(), "Rajesh Kumar", docs, POLICY, TraceRecorder())
         assert not any("differs" in w for w in warnings)
 
+    def test_provider_mismatch_form_vs_document_warns(self):
+        """Form says Apollo, bill says City Medical Centre -> must flag."""
+        from app.contracts.documents import ExtractedDocument
+        from app.contracts.enums import ExtractionMethod
+
+        claim = self.make_claim()
+        claim.hospital_name = "Apollo Hospitals"
+        docs = [
+            ExtractedDocument(
+                file_id="F1",
+                doc_type=DocumentType.HOSPITAL_BILL,
+                method=ExtractionMethod.PROVIDED_CONTENT,
+                patient_name="Rajesh Kumar",
+                provider_name="City Medical Centre",
+                total_amount=1500,
+            )
+        ]
+        warnings = cross_validate(claim, "Rajesh Kumar", docs, POLICY, TraceRecorder())
+        assert any("Provider mismatch" in w for w in warnings)
+
 
 # ------------------------------------------------------------------- decision
 class TestDecisionSynthesis:

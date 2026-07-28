@@ -100,10 +100,40 @@ def make_blurry_bill(path: Path) -> None:
     tmp.unlink()
 
 
+def make_apollo_bill(path: Path) -> None:
+    """₹4,500 bill at Apollo Hospitals (a network hospital) — for the
+    TC010-style network discount demo: 4,500 -> 3,600 -> 3,240."""
+    img, d = _new_page()
+    f_head, f_body, f_small = _font(28), _font(22), _font(19)
+    y = MARGIN
+    d.text((MARGIN, y), "APOLLO HOSPITALS", font=f_head, fill="black"); y += 40
+    d.text((MARGIN, y), "154/11 Bannerghatta Road, Bengaluru - 560076", font=f_small, fill="black"); y += 28
+    d.text((MARGIN, y), "GSTIN: 29AAACA1234A1Z2   Ph: 080-2630-4050", font=f_small, fill="black"); y += 50
+    d.line((MARGIN, y, W - MARGIN, y), fill="black", width=2); y += 20
+    d.text((MARGIN, y), "BILL / RECEIPT", font=f_body, fill="black"); y += 34
+    d.text((MARGIN, y), "Bill No: APL/2024/55190    Date: 03-Nov-2024", font=f_small, fill="black"); y += 50
+    d.text((MARGIN, y), "Patient Name: Deepak Shah", font=f_body, fill="black"); y += 34
+    d.text((MARGIN, y), "Age/Gender: 44 / Male", font=f_body, fill="black"); y += 34
+    d.text((MARGIN, y), "Referring Doctor: Dr. S. Iyer", font=f_body, fill="black"); y += 60
+    d.text((MARGIN, y), "DESCRIPTION                              AMOUNT", font=f_small, fill="black"); y += 32
+    d.line((MARGIN, y, W - MARGIN, y), fill="black", width=1); y += 16
+    for desc, amt in [("Consultation Fee (OPD)", "1500.00"),
+                      ("Medicines (Amoxicillin, Inhaler)", "3000.00")]:
+        d.text((MARGIN, y), desc, font=f_body, fill="black")
+        d.text((W - MARGIN - 160, y), amt, font=f_body, fill="black"); y += 36
+    y += 30
+    d.line((MARGIN, y, W - MARGIN, y), fill="black", width=1); y += 16
+    d.text((MARGIN, y), "Total Amount:", font=f_head, fill="black")
+    d.text((W - MARGIN - 160, y), "4500.00", font=f_head, fill="black"); y += 60
+    d.text((MARGIN, y), "Payment Mode: Card", font=f_small, fill="black")
+    img.save(path, "JPEG", quality=92)
+
+
 if __name__ == "__main__":
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "mock_docs"
     out_dir.mkdir(parents=True, exist_ok=True)
     make_prescription(out_dir / "prescription_rajesh.jpg")
     make_hospital_bill(out_dir / "bill_rajesh.jpg")
     make_blurry_bill(out_dir / "blurry_bill.jpg")
-    print(f"Generated 3 mock documents in {out_dir}")
+    make_apollo_bill(out_dir / "bill_apollo_deepak.jpg")
+    print(f"Generated 4 mock documents in {out_dir}")

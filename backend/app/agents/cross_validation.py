@@ -82,7 +82,26 @@ def cross_validate(
                 COMPONENT, True, f"Claimed amount matches bill total (₹{billed:,.0f})."
             )
 
-    # 4. Prescription presence when the category requires one.
+    # 4. Provider consistency: the hospital named on the claim form must match
+    # the provider on the documents — a disagreement here is a classic
+    # network-discount abuse vector (claiming a network hospital on the form
+    # while the bill is from a non-network provider).
+    doc_providers = [d.provider_name for d in docs if d.provider_name]
+    if claim.hospital_name and doc_providers:
+        form_provider = normalize(claim.hospital_name)
+        if not any(
+            form_provider in normalize(p) or normalize(p) in form_provider
+            for p in doc_providers
+        ):
+            warnings.append(
+                f"Provider mismatch: the claim form says '{claim.hospital_name}' but "
+                f"the document(s) are from "
+                + ", ".join(f"'{p}'" for p in doc_providers)
+                + "."
+            )
+            trace.warn(COMPONENT, warnings[-1])
+
+    # 5. Prescription presence when the category requires one.
     if rules.requires_prescription:
         has_rx = any(d.doc_type.value == "PRESCRIPTION" for d in docs)
         trace.check(
