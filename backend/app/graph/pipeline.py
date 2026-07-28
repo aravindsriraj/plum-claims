@@ -66,12 +66,16 @@ def verify_documents_node(state: ClaimState) -> dict:
                     "been rejected."
                 ),
             )
-        ]
+        ], {}
 
-    classified, issues = run_resilient(
+    classified, issues, reads = run_resilient(
         "DocumentVerificationAgent", run, fallback, trace
     )
-    return {"classified_documents": classified, "document_issues": issues}
+    return {
+        "classified_documents": classified,
+        "document_issues": issues,
+        "llm_reads": reads,
+    }
 
 
 def extract_documents_node(state: ClaimState) -> dict:
@@ -83,7 +87,7 @@ def extract_documents_node(state: ClaimState) -> dict:
             "ExtractionAgent",
             lambda doc=doc: extract_documents(
                 [doc], state["classified_documents"], trace,
-                state["policy"], llm=state.get("llm"),
+                state["policy"], llm_reads=state.get("llm_reads"),
             ),
             lambda: [],
             trace,

@@ -1,21 +1,23 @@
 """DocumentVerificationAgent: the pipeline's first gate.
 
-Classifies every upload and checks the submission against the policy's
-document requirements for the claim category. Any problem produces a
-specific, member-actionable DocumentIssue — never a generic error — and the
-pipeline stops before any claim decision (assignment requirement #2).
+Reads every upload ONCE with the vision model (classification + extraction +
+policy tagging in a single structured call), judges the submission against
+the policy's document requirements for the claim category, and stashes the
+raw read for the ExtractionAgent to build from — 2N -> N LLM calls per claim.
+Any problem produces a specific, member-actionable DocumentIssue — never a
+generic error — and the pipeline stops before any claim decision
+(assignment requirement #2).
 
-Classification has two modes:
-  - Real uploads (file_content_base64 present): a vision model identifies
-    the document type, quality and patient name.
-  - Simulation metadata present (actual_type/quality): used directly. This
-    keeps eval cases deterministic and targets this agent's decision logic
-    rather than OCR quality.
+Reading has two modes:
+  - Real uploads (file_content_base64 present): one vision call per document.
+  - Simulation metadata present (actual_type/quality): used directly, no LLM.
+    This keeps eval cases deterministic and targets this agent's decision
+    logic rather than OCR quality.
 """
 
 from pydantic import BaseModel, Field
 
-from app.contracts.documents import ClassifiedDocument, DocumentIssue
+from app.contracts.documents import ClassifiedDocument, DocumentIssue, LineItem
 from app.contracts.enums import (
     ClaimCategory,
     DocumentIssueCode,
@@ -25,7 +27,7 @@ from app.contracts.enums import (
 )
 from app.contracts.inputs import DocumentInput
 from app.llm.client import LlmClient
-from app.llm.prompts import DOCUMENT_CLASSIFIER_PROMPT
+from app.llm.prompts import DOCUMENT_READ_PROMPT
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.textnorm import normalize
@@ -33,39 +35,82 @@ from app.rules.textnorm import normalize
 COMPONENT = "DocumentVerificationAgent"
 
 
-class LlmClassification(BaseModel):
-    """Structured output schema for vision classification."""
+class LlmExclusionTag(BaseModel):
+    """An exclusion the model believes applies. Validated against the policy
+    vocabulary downstream — never trusted blindly."""
 
+    entry: str = Field(..., description="Verbatim policy exclusion entry")
+    evidence: str = Field(default="", description="Document text indicating it")
+
+
+class LlmDocumentRead(BaseModel):
+    """Single vision read of one document: classification + extraction +
+    policy-vocabulary tags in one structured output."""
+
+    # --- classification half ---
     doc_type: DocumentType
     quality: DocumentQuality
-    patient_name_on_doc: str | None = None
-    confidence: float = Field(ge=0, le=1)
+    classification_confidence: float = Field(ge=0, le=1)
+    # --- extraction half ---
+    patient_name: str | None = None
+    doctor_name: str | None = None
+    doctor_registration: str | None = None
+    provider_name: str | None = None
+    document_date: str | None = Field(default=None, description="ISO YYYY-MM-DD")
+    diagnosis: str | None = None
+    treatment: str | None = None
+    medicines: list[str] = Field(default_factory=list)
+    tests_ordered: list[str] = Field(default_factory=list)
+    line_items: list[LineItem] = Field(default_factory=list)
+    total_amount: float | None = None
+    unreadable_fields: list[str] = Field(default_factory=list)
+    overall_confidence: float = Field(default=0.8, ge=0, le=1)
+    # --- policy tagging half (perception only; judged downstream) ---
+    matched_conditions: list[str] = Field(default_factory=list)
+    matched_exclusions: list[LlmExclusionTag] = Field(default_factory=list)
 
 
-def classify_document(doc: DocumentInput, llm: LlmClient | None) -> ClassifiedDocument:
-    """Determine one document's type, quality and patient name.
+def _vocabulary(policy: Policy, category: ClaimCategory) -> dict[str, str]:
+    """The policy vocabulary injected into the read prompt."""
+    rules = policy.category_rules(category)
+    covered = rules.covered_procedures + rules.covered_items
+    excluded = rules.excluded_procedures + rules.excluded_items
+    return {
+        "category": category.value,
+        "condition_keys": ", ".join(policy.specific_condition_waiting_days) or "(none)",
+        "exclusion_entries": "\n".join(f"- {e}" for e in policy.excluded_conditions),
+        "covered_procedures": ", ".join(covered) if covered else "(no list — judge by exclusion entries only)",
+        "excluded_procedures": ", ".join(excluded) if excluded else "(none)",
+    }
 
-    Raises if the document needs vision classification but no LLM client is
-    available — the caller wraps this in the resilience wrapper.
+
+def read_document(
+    doc: DocumentInput, llm: LlmClient | None, policy: Policy, category: ClaimCategory
+) -> tuple[ClassifiedDocument, LlmDocumentRead | None]:
+    """Read one document: vision model for real uploads, metadata otherwise.
+
+    Returns (classified_document, raw_llm_read). The raw read is None for
+    simulation-mode documents. Raises if vision is needed but no LLM client
+    is available — the caller wraps this in the resilience wrapper.
     """
     if doc.file_content_base64:
         if llm is None:
-            raise RuntimeError("Vision classification requires an LLM client")
-        result = llm.structured(
-            LlmClassification,
-            DOCUMENT_CLASSIFIER_PROMPT,
+            raise RuntimeError("Vision read requires an LLM client")
+        read = llm.structured(
+            LlmDocumentRead,
+            DOCUMENT_READ_PROMPT.format(**_vocabulary(policy, category)),
             image_base64=doc.file_content_base64,
             mime_type=doc.mime_type or "image/jpeg",
         )
         return ClassifiedDocument(
             file_id=doc.file_id,
             file_name=doc.file_name,
-            detected_type=result.doc_type,
-            detection_confidence=result.confidence,
-            quality=result.quality,
-            patient_name_on_doc=result.patient_name_on_doc,
+            detected_type=read.doc_type,
+            detection_confidence=read.classification_confidence,
+            quality=read.quality,
+            patient_name_on_doc=read.patient_name,
             method=ExtractionMethod.VISION_LLM,
-        )
+        ), read
 
     # Simulation path: ground-truth metadata describes the document.
     return ClassifiedDocument(
@@ -76,7 +121,7 @@ def classify_document(doc: DocumentInput, llm: LlmClient | None) -> ClassifiedDo
         quality=doc.quality or DocumentQuality.GOOD,
         patient_name_on_doc=doc.patient_name_on_doc,
         method=ExtractionMethod.METADATA,
-    )
+    ), None
 
 
 def verify_documents(
@@ -86,25 +131,30 @@ def verify_documents(
     policy: Policy,
     trace: TraceRecorder,
     llm: LlmClient | None = None,
-) -> tuple[list[ClassifiedDocument], list[DocumentIssue]]:
-    """Classify all uploads and validate the set against policy requirements.
+) -> tuple[list[ClassifiedDocument], list[DocumentIssue], dict[str, LlmDocumentRead]]:
+    """Read all uploads and validate the set against policy requirements.
 
-    Returns (classified_documents, issues). A non-empty issues list means the
-    pipeline must stop; the issues tell the member exactly what to fix.
+    Returns (classified_documents, issues, llm_reads). A non-empty issues list
+    means the pipeline must stop; the issues tell the member exactly what to
+    fix. llm_reads carries the raw vision read per file_id for the
+    ExtractionAgent (empty in simulation mode).
     """
     requirement = policy.document_requirement(category)
     issues: list[DocumentIssue] = []
     classified: list[ClassifiedDocument] = []
+    reads: dict[str, LlmDocumentRead] = {}
 
-    # Step 1: classify each document (or read its simulation metadata).
+    # Step 1: read each document (or read its simulation metadata).
     for doc in documents:
-        cd = classify_document(doc, llm)
+        cd, read = read_document(doc, llm, policy, category)
         classified.append(cd)
+        if read is not None:
+            reads[doc.file_id] = read
         trace.record(
             COMPONENT,
             "EXTRACTION",
             "PASS",
-            f"{doc.file_name or doc.file_id}: classified as {cd.detected_type.value} "
+            f"{doc.file_name or doc.file_id}: read as {cd.detected_type.value} "
             f"(quality {cd.quality.value}, confidence {cd.detection_confidence:.2f}, "
             f"via {cd.method.value}).",
             cd.model_dump(mode="json"),
@@ -241,4 +291,4 @@ def verify_documents(
             f"Document set satisfies {category.value} requirements "
             f"(required: {[t.value for t in requirement.required]}).",
         )
-    return classified, issues
+    return classified, issues, reads

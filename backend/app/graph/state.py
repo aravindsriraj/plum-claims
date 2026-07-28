@@ -23,6 +23,7 @@ class ClaimState(TypedDict, total=False):
     # --- Node outputs ---
     classified_documents: list[ClassifiedDocument]
     document_issues: list[DocumentIssue]  # non-empty -> early stop
+    llm_reads: dict[str, Any]  # file_id -> LlmDocumentRead (vision mode only)
     extracted_documents: list[ExtractedDocument]
     cross_validation_warnings: list[str]
     adjudication: AdjudicationResult

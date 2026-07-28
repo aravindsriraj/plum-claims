@@ -39,7 +39,7 @@ def doc(file_id, **kwargs) -> DocumentInput:
 # ------------------------------------------------------- document verification
 class TestDocumentVerification:
     def test_tc001_two_prescriptions_specific_messages(self):
-        classified, issues = verify_documents(
+        classified, issues, _ = verify_documents(
             ClaimCategory.CONSULTATION,
             "Rajesh Kumar",
             [
@@ -59,7 +59,7 @@ class TestDocumentVerification:
         assert "another_prescription.jpg" in joined
 
     def test_tc002_unreadable_asks_reupload_not_rejection(self):
-        _, issues = verify_documents(
+        _, issues, _ = verify_documents(
             ClaimCategory.PHARMACY,
             "Sneha Reddy",
             [
@@ -82,7 +82,7 @@ class TestDocumentVerification:
         )
 
     def test_tc003_patient_mismatch_names_both_patients(self):
-        _, issues = verify_documents(
+        _, issues, _ = verify_documents(
             ClaimCategory.CONSULTATION,
             "Rajesh Kumar",
             [
@@ -98,7 +98,7 @@ class TestDocumentVerification:
         assert "Arjun Mehta" in mismatches[0].message
 
     def test_clean_document_set_no_issues(self):
-        _, issues = verify_documents(
+        _, issues, _ = verify_documents(
             ClaimCategory.DIAGNOSTIC,
             "Suresh Patil",
             [
@@ -128,9 +128,9 @@ class TestExtraction:
                 },
             )
         ]
-        from app.agents.document_verification import classify_document
+        from app.agents.document_verification import read_document
 
-        classified = [classify_document(documents[0], None)]
+        classified = [read_document(documents[0], None, POLICY, ClaimCategory.CONSULTATION)[0]]
         [extracted] = extract_documents(documents, classified, TraceRecorder(), POLICY)
         assert extracted.patient_name == "Rajesh Kumar"
         assert extracted.provider_name == "City Clinic, Bengaluru"
@@ -141,9 +141,9 @@ class TestExtraction:
 
     def test_metadata_only_document_gets_shell(self):
         documents = [doc("F1", actual_type=DocumentType.PRESCRIPTION, patient_name_on_doc="X")]
-        from app.agents.document_verification import classify_document
+        from app.agents.document_verification import read_document
 
-        classified = [classify_document(documents[0], None)]
+        classified = [read_document(documents[0], None, POLICY, ClaimCategory.CONSULTATION)[0]]
         [extracted] = extract_documents(documents, classified, TraceRecorder(), POLICY)
         assert extracted.patient_name == "X"
         assert extracted.overall_confidence == 0.5

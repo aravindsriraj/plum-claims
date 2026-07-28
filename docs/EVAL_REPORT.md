@@ -1,6 +1,6 @@
 # Eval Report — 12 Test Cases
 
-Generated: 2026-07-28T13:38:24  
+Generated: 2026-07-28T13:48:07  
 Result: **12/12 passed** (deterministic run, no LLM calls — documents use provided-content/metadata modes)
 
 | Case | Name | Expected | Actual | Result |
@@ -32,7 +32,7 @@ Result: **12/12 passed** (deterministic run, no LLM calls — documents use prov
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-EE6D1C43: DOCUMENT_REJECTED.
+Claim CLM-2E028255: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'dr_sharma_prescription.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.
@@ -42,8 +42,8 @@ No claim decision was made.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹1,500, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: dr_sharma_prescription.jpg: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: another_prescription.jpg: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: dr_sharma_prescription.jpg: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: another_prescription.jpg: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
     4. [WARN] DocumentVerificationAgent: Required document HOSPITAL_BILL is missing from the upload.
     5. [WARN] DocumentVerificationAgent: F002: PRESCRIPTION does not satisfy the requirements.
 ```
@@ -60,7 +60,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-9047A15D: DOCUMENT_REJECTED.
+Claim CLM-445A80AF: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [UNREADABLE_DOCUMENT] We couldn't read your pharmacy bill ('blurry_bill.jpg') — the image is too blurry or damaged. Please re-upload a clear photo of that same document. Your claim has NOT been rejected; it will continue once we can read this document.
@@ -69,8 +69,8 @@ No claim decision was made.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: PHARMACY, ₹800, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: prescription.jpg: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: blurry_bill.jpg: classified as PHARMACY_BILL (quality UNREADABLE, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: prescription.jpg: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: blurry_bill.jpg: read as PHARMACY_BILL (quality UNREADABLE, confidence 1.00, via METADATA).
     4. [WARN] DocumentVerificationAgent: F004: document unreadable, re-upload requested.
 ```
 </details>
@@ -86,7 +86,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-7526EC43: DOCUMENT_REJECTED.
+Claim CLM-C9F85F2A: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [PATIENT_MISMATCH] Your documents appear to belong to different people: 'prescription_rajesh.jpg' belongs to Rajesh Kumar; 'bill_arjun.jpg' belongs to Arjun Mehta. Please upload documents for Rajesh Kumar only.
@@ -95,8 +95,8 @@ No claim decision was made.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹1,500, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: prescription_rajesh.jpg: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: bill_arjun.jpg: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: prescription_rajesh.jpg: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: bill_arjun.jpg: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [WARN] DocumentVerificationAgent: Patient mismatch across documents: 'prescription_rajesh.jpg' belongs to Rajesh Kumar; 'bill_arjun.jpg' belongs to Arjun Mehta.
 ```
 </details>
@@ -111,7 +111,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-F30C7CEF: DECIDED.
+Claim CLM-2BE1787A: DECIDED.
 
 Decision: APPROVED — approved ₹1,350 of ₹1,500 (confidence 0.98).
   All checks passed. Approved ₹1,350 of ₹1,500.
@@ -120,8 +120,8 @@ Financial breakdown:
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹1,500, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F007: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F008: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F007: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F008: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F007: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F008: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -158,15 +158,15 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-45FFCD80: DECIDED.
+Claim CLM-A11DD282: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹3,000 (confidence 0.98).
   diabetes: 90-day waiting period not served. Eligible from 2024-11-30.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹3,000, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F009: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F010: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F009: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F010: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F009: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F010: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -198,7 +198,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-08ADF592: DECIDED.
+Claim CLM-C7E922BC: DECIDED.
 
 Decision: PARTIAL — approved ₹8,000 of ₹12,000 (confidence 0.98).
   Approved ₹8,000 of ₹12,000.
@@ -207,7 +207,7 @@ Decision: PARTIAL — approved ₹8,000 of ₹12,000 (confidence 0.98).
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: DENTAL, ₹12,000, 1 document(s).
-    2. [PASS] DocumentVerificationAgent: F011: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F011: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     3. [PASS] DocumentVerificationAgent: Document set satisfies DENTAL requirements (required: ['HOSPITAL_BILL']).
     4. [PASS] ExtractionAgent: F011: extracted via PROVIDED_CONTENT (confidence 1.00)
     5. [PASS] CrossValidationAgent: Patient name 'Priya Singh' consistent across documents.
@@ -244,16 +244,16 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-F13615D7: DECIDED.
+Claim CLM-61AEE29C: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹15,000 (confidence 0.98).
   'MRI Lumbar Spine' (₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: DIAGNOSTIC, ₹15,000, 3 document(s).
-    2. [PASS] DocumentVerificationAgent: F012: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F013: classified as LAB_REPORT (quality GOOD, confidence 1.00, via METADATA).
-    4. [PASS] DocumentVerificationAgent: F014: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F012: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F013: read as LAB_REPORT (quality GOOD, confidence 1.00, via METADATA).
+    4. [PASS] DocumentVerificationAgent: F014: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     5. [PASS] DocumentVerificationAgent: Document set satisfies DIAGNOSTIC requirements (required: ['PRESCRIPTION', 'LAB_REPORT', 'HOSPITAL_BILL']).
     6. [PASS] ExtractionAgent: F012: extracted via PROVIDED_CONTENT (confidence 1.00)
     7. [PASS] ExtractionAgent: F013: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -289,15 +289,15 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-8EEBFFB8: DECIDED.
+Claim CLM-A30F743F: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹7,500 (confidence 0.98).
   Claimed amount ₹7,500 exceeds the per-claim limit of ₹5,000.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹7,500, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F015: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F016: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F015: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F016: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F015: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F016: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -333,7 +333,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-20991579: DECIDED.
+Claim CLM-04BE7AB2: DECIDED.
 
 Decision: MANUAL_REVIEW — approved ₹0 of ₹4,800 (confidence 0.98).
   Routed to manual review due to fraud/risk signals:
@@ -344,8 +344,8 @@ Financial breakdown:
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹4,800, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F017: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F018: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F017: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F018: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F017: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F018: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -382,7 +382,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-CBC2EB06: DECIDED.
+Claim CLM-6558C8CC: DECIDED.
 
 Decision: APPROVED — approved ₹3,240 of ₹4,500 (confidence 0.98).
   All checks passed. Approved ₹3,240 of ₹4,500.
@@ -392,8 +392,8 @@ Financial breakdown:
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹4,500, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F019: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F020: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F019: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F020: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F019: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F020: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -433,7 +433,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-93000D67: DECIDED.
+Claim CLM-9895F271: DECIDED.
 
 Decision: APPROVED — approved ₹4,000 of ₹4,000 (confidence 0.73).
   All checks passed. Approved ₹4,000 of ₹4,000.
@@ -441,8 +441,8 @@ WARNING: processing was degraded (see component failures).
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: ALTERNATIVE_MEDICINE, ₹4,000, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F021: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F022: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F021: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F022: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies ALTERNATIVE_MEDICINE requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F021: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F022: extracted via PROVIDED_CONTENT (confidence 1.00)
@@ -476,15 +476,15 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-6203CA5C: DECIDED.
+Claim CLM-4A460849: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹8,000 (confidence 0.98).
   Treatment relates to 'Morbid Obesity — BMI 37', which falls under the policy exclusion 'Obesity and weight loss programs'. Excluded conditions are never payable under this policy.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹8,000, 2 document(s).
-    2. [PASS] DocumentVerificationAgent: F023: classified as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
-    3. [PASS] DocumentVerificationAgent: F024: classified as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
+    2. [PASS] DocumentVerificationAgent: F023: read as PRESCRIPTION (quality GOOD, confidence 1.00, via METADATA).
+    3. [PASS] DocumentVerificationAgent: F024: read as HOSPITAL_BILL (quality GOOD, confidence 1.00, via METADATA).
     4. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     5. [PASS] ExtractionAgent: F023: extracted via PROVIDED_CONTENT (confidence 1.00)
     6. [PASS] ExtractionAgent: F024: extracted via PROVIDED_CONTENT (confidence 1.00)

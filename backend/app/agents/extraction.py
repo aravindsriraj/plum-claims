@@ -5,55 +5,32 @@ Two modes, selected per document:
     It is normalized through the same Pydantic schema as vision output, so
     downstream components cannot tell the difference. Clinical text is tagged
     by the deterministic matcher (evals stay LLM-free).
-  - VISION_LLM: a vision model reads the actual file. Messy inputs (handwriting,
-    stamps, blur) are handled by instructing the model to mark illegible fields
-    as unreadable rather than guess — degraded confidence, not wrong data.
-    The model's semantic tags are validated against the policy vocabulary and
-    merged with the deterministic matcher's tags (union; disagreements flagged).
+  - VISION_LLM: the DocumentVerificationAgent's single vision read already
+    extracted this document's fields and semantic tags — this agent shapes
+    that read into an ExtractedDocument (no second LLM call), validates the
+    model's tags against the policy vocabulary, and merges them with the
+    deterministic matcher's tags (union; disagreements flagged).
 
 This agent NEVER judges coverage. It reports what the document says and how
 that content maps onto the policy vocabulary — adjudication decides the rest.
 """
 
-from pydantic import BaseModel, Field
-
+from app.agents.document_verification import LlmDocumentRead
 from app.contracts.documents import (
     ClassifiedDocument,
     DocumentTags,
     ExtractedDocument,
     LineItem,
+    PolicyTag,
 )
 from app.contracts.enums import DocumentQuality, ExtractionMethod
 from app.contracts.inputs import DocumentInput
-from app.llm.client import LlmClient
-from app.llm.prompts import DOCUMENT_EXTRACTION_PROMPT
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
-from app.rules.tagging import tag_deterministic
+from app.rules.tagging import merge_tags, tag_deterministic, validate_llm_tags
 from app.util import parse_iso_date
 
 COMPONENT = "ExtractionAgent"
-
-
-class LlmExtraction(BaseModel):
-    """Structured output schema for vision extraction.
-
-    Deliberately mirrors ExtractedDocument so the two modes converge.
-    """
-
-    patient_name: str | None = None
-    doctor_name: str | None = None
-    doctor_registration: str | None = None
-    provider_name: str | None = None
-    document_date: str | None = Field(default=None, description="ISO YYYY-MM-DD")
-    diagnosis: str | None = None
-    treatment: str | None = None
-    medicines: list[str] = Field(default_factory=list)
-    tests_ordered: list[str] = Field(default_factory=list)
-    line_items: list[LineItem] = Field(default_factory=list)
-    total_amount: float | None = None
-    unreadable_fields: list[str] = Field(default_factory=list)
-    overall_confidence: float = Field(default=0.8, ge=0, le=1)
 
 
 def _from_provided_content(
@@ -95,12 +72,63 @@ def _from_provided_content(
     return extracted
 
 
+def _from_llm_read(
+    doc: DocumentInput,
+    classified: ClassifiedDocument,
+    read: LlmDocumentRead,
+    policy: Policy,
+    trace: TraceRecorder,
+) -> ExtractedDocument:
+    """Shape the verification agent's raw vision read into an
+    ExtractedDocument, then validate + merge its semantic tags.
+
+    The model's tags are perception: they are whitelist-checked against the
+    policy vocabulary (hallucinated entries dropped + flagged), then merged
+    with the deterministic matcher's tags — union, disagreements traced.
+    """
+    extracted = ExtractedDocument(
+        file_id=doc.file_id,
+        doc_type=classified.detected_type,
+        method=ExtractionMethod.VISION_LLM,
+        patient_name=read.patient_name or classified.patient_name_on_doc,
+        doctor_name=read.doctor_name,
+        doctor_registration=read.doctor_registration,
+        provider_name=read.provider_name,
+        document_date=parse_iso_date(read.document_date),
+        diagnosis=read.diagnosis,
+        treatment=read.treatment,
+        medicines=read.medicines,
+        tests_ordered=read.tests_ordered,
+        line_items=read.line_items,
+        total_amount=read.total_amount,
+        overall_confidence=read.overall_confidence,
+        unreadable_fields=read.unreadable_fields,
+    )
+
+    llm_tags = DocumentTags(
+        conditions=read.matched_conditions,
+        exclusions=[
+            PolicyTag(entry=t.entry, matched_text=t.evidence or read.diagnosis or "", via="llm")
+            for t in read.matched_exclusions
+        ],
+    )
+    clean_llm_tags, warnings = validate_llm_tags(llm_tags, policy)
+    det_tags = tag_deterministic(
+        policy, extracted.diagnosis, extracted.treatment, *extracted.tests_ordered
+    )
+    merged = merge_tags(clean_llm_tags, det_tags, file_id=doc.file_id)
+    extracted.tags = merged.tags
+    for warning in warnings + merged.warnings:
+        trace.warn(COMPONENT, warning)
+    return extracted
+
+
 def extract_documents(
     documents: list[DocumentInput],
     classified: list[ClassifiedDocument],
     trace: TraceRecorder,
     policy: Policy,
-    llm: LlmClient | None = None,
+    llm_reads: dict[str, LlmDocumentRead] | None = None,
 ) -> list[ExtractedDocument]:
     """Extract structured data from every document.
 
@@ -109,40 +137,19 @@ def extract_documents(
     absent from the returned list, and the failure is in the trace.
     """
     by_id = {c.file_id: c for c in classified}
+    reads = llm_reads or {}
     results: list[ExtractedDocument] = []
 
     for doc in documents:
         cd = by_id[doc.file_id]
         if doc.file_content_base64:
-            if llm is None:
-                raise RuntimeError("Vision extraction requires an LLM client")
-            out = llm.structured(
-                LlmExtraction,
-                DOCUMENT_EXTRACTION_PROMPT.format(doc_type=cd.detected_type.value),
-                image_base64=doc.file_content_base64,
-                mime_type=doc.mime_type or "image/jpeg",
-            )
-            extracted = ExtractedDocument(
-                file_id=doc.file_id,
-                doc_type=cd.detected_type,
-                method=ExtractionMethod.VISION_LLM,
-                patient_name=out.patient_name or cd.patient_name_on_doc,
-                doctor_name=out.doctor_name,
-                doctor_registration=out.doctor_registration,
-                provider_name=out.provider_name,
-                document_date=parse_iso_date(out.document_date),
-                diagnosis=out.diagnosis,
-                treatment=out.treatment,
-                medicines=out.medicines,
-                tests_ordered=out.tests_ordered,
-                line_items=out.line_items,
-                total_amount=out.total_amount,
-                overall_confidence=out.overall_confidence,
-                unreadable_fields=out.unreadable_fields,
-            )
-            extracted.tags = tag_deterministic(
-                policy, extracted.diagnosis, extracted.treatment, *extracted.tests_ordered
-            )
+            read = reads.get(doc.file_id)
+            if read is None:
+                raise RuntimeError(
+                    f"Vision read for {doc.file_id} missing — verification "
+                    f"must read every uploaded document exactly once"
+                )
+            extracted = _from_llm_read(doc, cd, read, policy, trace)
         elif doc.content is not None:
             extracted = _from_provided_content(doc, cd, policy)
         else:
