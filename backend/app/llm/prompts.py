@@ -70,3 +70,26 @@ MEMBER_MESSAGE_PROMPT = """Rewrite this insurance claim status message for the m
 - Do not add advice, promises, or timelines that are not in the original.
 
 Original message: {template_message}"""
+
+CLINICAL_CONSISTENCY_PROMPT = """You are evaluating medical consistency for an Indian health insurance claim.
+Diagnosis: {diagnosis}
+Treatment / Procedures: {treatment}
+Medicines Prescribed: {medicines}
+Tests Ordered: {tests}
+
+Decide if the treatment, medicines, and tests are clinically consistent and standard for the stated diagnosis.
+- Return consistent=true if they align with standard medical practice.
+- Return consistent=false ONLY if there is an obvious clinical mismatch or anomaly. Provide a 1-sentence rationale."""
+
+OPS_SUMMARY_PROMPT = """You are an AI assistant writing a 3-bullet executive briefing for an operations manager reviewing a health insurance claim decision.
+Claim ID: {claim_id}
+Status: {status}
+Decision: {decision_value} (Approved ₹{approved_amount:,.0f} of ₹{claimed_amount:,.0f})
+Reasons: {reasons}
+Warnings / Signals: {warnings}
+
+Generate 3 concise, professional bullet points highlighting:
+1. Member eligibility & claim type overview
+2. Adjudication & financial outcome
+3. Any risk signals, warnings, or required ops actions"""
+

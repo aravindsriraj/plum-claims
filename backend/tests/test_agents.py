@@ -320,6 +320,39 @@ class TestCrossValidation:
         )
         assert any("do not match" in w for w in warnings)
 
+    def test_llm_clinical_consistency_checks_treatment_aligns_with_diagnosis(self):
+        """Clinical consistency check uses LLM to flag medical anomalies."""
+        from app.agents.cross_validation import LlmClinicalVerdict, LlmNameVerdict
+        from app.contracts.documents import ExtractedDocument
+        from app.contracts.enums import ExtractionMethod
+
+        class FakeLlm:
+            call_count = 1
+
+            def structured(self, schema, prompt, **kwargs):
+                if schema == LlmNameVerdict:
+                    return LlmNameVerdict(same_person=True)
+                return LlmClinicalVerdict(
+                    consistent=False, rationale="Dental scaling is unusual for hypertension"
+                )
+
+        docs = [
+            ExtractedDocument(
+                file_id="F1",
+                doc_type=DocumentType.HOSPITAL_BILL,
+                method=ExtractionMethod.PROVIDED_CONTENT,
+                patient_name="Rajesh Kumar",
+                diagnosis="Essential Hypertension",
+                treatment="Dental Scaling",
+                total_amount=1500,
+            )
+        ]
+        trace = TraceRecorder()
+        warnings = cross_validate(
+            self.make_claim(), "Rajesh Kumar", docs, POLICY, trace, llm=FakeLlm()
+        )
+        assert any("Clinical inconsistency" in w for w in warnings)
+
 
 # ------------------------------------------------------------------- member message
 class TestMemberMessagePolisher:

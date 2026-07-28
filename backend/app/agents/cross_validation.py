@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from app.contracts.documents import ExtractedDocument
 from app.contracts.inputs import ClaimInput
 from app.llm.client import LlmClient
-from app.llm.prompts import NAME_RECONCILIATION_PROMPT
+from app.llm.prompts import CLINICAL_CONSISTENCY_PROMPT, NAME_RECONCILIATION_PROMPT
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.textnorm import normalize
@@ -38,6 +38,52 @@ class LlmNameVerdict(BaseModel):
 
     same_person: bool
     rationale: str = Field(default="")
+
+
+class LlmClinicalVerdict(BaseModel):
+    """Structured output for medical necessity and clinical consistency."""
+
+    consistent: bool
+    rationale: str = Field(default="")
+
+
+def _check_clinical_consistency(
+    docs: list[ExtractedDocument], llm: LlmClient | None, trace: TraceRecorder
+) -> list[str]:
+    """LLM assessment of clinical appropriateness between diagnosis and treatment/rx."""
+    if llm is None:
+        return []
+    
+    diagnoses = [d.diagnosis for d in docs if d.diagnosis]
+    treatments = [d.treatment for d in docs if d.treatment]
+    medicines = [m for d in docs for m in d.medicines]
+    tests = [t for d in docs for t in d.tests_ordered]
+
+    if not diagnoses or not (treatments or medicines or tests):
+        return []
+
+    try:
+        verdict = llm.structured(
+            LlmClinicalVerdict,
+            CLINICAL_CONSISTENCY_PROMPT.format(
+                diagnosis=", ".join(diagnoses),
+                treatment=", ".join(treatments) or "(none listed)",
+                medicines=", ".join(medicines) or "(none listed)",
+                tests=", ".join(tests) or "(none listed)",
+            ),
+        )
+        if verdict.consistent:
+            trace.check(
+                COMPONENT, True, "Clinical consistency verified: treatment aligns with diagnosis."
+            )
+            return []
+        else:
+            msg = f"Clinical inconsistency noted: {verdict.rationale}"
+            trace.warn(COMPONENT, msg)
+            return [msg]
+    except Exception as exc:
+        trace.warn(COMPONENT, f"Clinical consistency evaluation skipped ({type(exc).__name__}).")
+        return []
 
 
 def _reconcile_names(
@@ -156,5 +202,8 @@ def cross_validate(
         )
         if not has_rx:
             warnings.append("Required prescription is missing from extracted documents.")
+
+    # 6. LLM Clinical necessity & consistency evaluation
+    warnings.extend(_check_clinical_consistency(docs, llm, trace))
 
     return warnings
