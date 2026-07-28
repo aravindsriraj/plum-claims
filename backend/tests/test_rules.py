@@ -15,14 +15,13 @@ from app.contracts.inputs import ClaimInput, DocumentInput, PriorClaim
 from app.observability.trace import TraceRecorder
 from app.policy.loader import load_policy
 from app.rules.adjudication import adjudicate
-from app.rules.conditions import match_conditions
-from app.rules.exclusions import match_exclusions_deterministic
 from app.rules.financial import (
     apply_copay,
     apply_network_discount,
     is_network_hospital,
 )
 from app.rules.fraud import assess_fraud
+from app.rules.tagging import tag_deterministic
 from app.rules.waiting import (
     check_initial_waiting_period,
     check_specific_waiting_periods,
@@ -71,31 +70,31 @@ def run(claim, docs):
 # ---------------------------------------------------------------- conditions
 class TestConditionMatching:
     def test_diabetes_matches(self):
-        assert "diabetes" in match_conditions("Type 2 Diabetes Mellitus")
+        assert "diabetes" in tag_deterministic(POLICY, "Type 2 Diabetes Mellitus").conditions
 
     def test_joint_pain_is_not_joint_replacement(self):
         # TC011: "Chronic Joint Pain" must NOT trigger the 730-day joint
         # replacement waiting period.
-        assert "joint_replacement" not in match_conditions("Chronic Joint Pain")
+        assert "joint_replacement" not in tag_deterministic(POLICY, "Chronic Joint Pain").conditions
 
     def test_obesity_matches(self):
-        matched = match_conditions("Morbid Obesity — BMI 37")
+        matched = tag_deterministic(POLICY, "Morbid Obesity — BMI 37").conditions
         assert "obesity_treatment" in matched
 
 
 # ---------------------------------------------------------------- exclusions
 class TestExclusions:
     def test_bariatric_consultation_excluded(self):
-        matches = match_exclusions_deterministic(
-            POLICY.excluded_conditions,
+        tags = tag_deterministic(
+            POLICY,
             "Morbid Obesity — BMI 37",
             "Bariatric Consultation and Customised Diet Plan",
         )
-        entries = {m.policy_entry for m in matches}
+        entries = {t.entry for t in tags.exclusions}
         assert "Obesity and weight loss programs" in entries or "Bariatric surgery" in entries
 
     def test_viral_fever_not_excluded(self):
-        assert not match_exclusions_deterministic(POLICY.excluded_conditions, "Viral Fever")
+        assert not tag_deterministic(POLICY, "Viral Fever").exclusions
 
 
 # ------------------------------------------------------------------ waiting

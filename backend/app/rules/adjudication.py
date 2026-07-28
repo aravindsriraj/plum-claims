@@ -25,35 +25,27 @@ later hard checks are recorded as SKIPPED so the trace stays honest about
 what was and wasn't evaluated.
 """
 
-from datetime import date
-
 from app.contracts.decision import AdjudicationResult, RuleCheck
-from app.contracts.documents import ExtractedDocument, LineItem
+from app.contracts.documents import DocumentTags, ExtractedDocument, LineItem, PolicyTag
 from app.contracts.enums import ClaimCategory, LineItemStatus
 from app.contracts.inputs import ClaimInput
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
-from app.rules.conditions import match_conditions
-from app.rules.exclusions import match_exclusions_deterministic
 from app.rules.financial import (
     apply_copay,
     apply_network_discount,
     apply_sub_limit,
     is_network_hospital,
 )
+from app.rules.tagging import tag_deterministic
 from app.rules.textnorm import normalize
 from app.rules.waiting import (
     check_initial_waiting_period,
     check_specific_waiting_periods,
 )
+from app.util import parse_iso_date
 
 COMPONENT = "AdjudicationEngine"
-
-
-def _parse_date(value: str | None) -> date | None:
-    if not value:
-        return None
-    return date.fromisoformat(value)
 
 
 def _clinical_texts(docs: list[ExtractedDocument]) -> list[str]:
@@ -72,6 +64,32 @@ def _all_line_items(docs: list[ExtractedDocument]) -> list[LineItem]:
         for li in d.line_items:
             items.append(li.model_copy())
     return items
+
+
+def _tags_for(docs: list[ExtractedDocument], policy: Policy) -> DocumentTags:
+    """Aggregate semantic tags across all documents.
+
+    The ExtractionAgent tags every document it produces (deterministically in
+    provided-content mode, LLM+deterministic union in vision mode). Documents
+    built outside the pipeline (unit tests, direct API construction) may be
+    untagged — those are tagged deterministically here so the rule engine
+    NEVER matches raw text itself; it only consumes tags.
+    """
+    conditions: list[str] = []
+    exclusions: list[PolicyTag] = []
+    seen_exclusions: set[str] = set()
+    for d in docs:
+        tags = d.tags
+        if tags is None:
+            tags = tag_deterministic(policy, d.diagnosis, d.treatment, *d.tests_ordered)
+        for c in tags.conditions:
+            if c not in conditions:
+                conditions.append(c)
+        for tag in tags.exclusions:
+            if tag.entry not in seen_exclusions:
+                seen_exclusions.add(tag.entry)
+                exclusions.append(tag)
+    return DocumentTags(conditions=conditions, exclusions=exclusions)
 
 
 def _provider_name(claim: ClaimInput, docs: list[ExtractedDocument]) -> str | None:
@@ -100,6 +118,7 @@ def adjudicate(
     rules = policy.category_rules(claim.claim_category)
     clinical = _clinical_texts(docs)
     line_items = _all_line_items(docs)
+    tags = _tags_for(docs, policy)
 
     def add_check(check: RuleCheck) -> bool:
         """Record a check and return whether the pipeline may continue."""
@@ -130,7 +149,26 @@ def adjudicate(
         )
     ):
         return result
-    join_date = _parse_date(policy.member_join_date(member))
+    join_date = parse_iso_date(policy.member_join_date(member))
+
+    # --- 1b. Category coverage gate ------------------------------------------
+    # The policy can turn an entire category off (covered: false). Check this
+    # before anything else clinical — an uncovered category is never payable.
+    if not add_check(
+        RuleCheck(
+            rule_id="CATEGORY_NOT_COVERED",
+            name="Category coverage",
+            passed=rules.covered,
+            hard_fail=True,
+            reason=(
+                f"{claim.claim_category.value} is a covered category under this policy."
+                if rules.covered
+                else f"{claim.claim_category.value} is not covered under this policy."
+            ),
+            detail={"category": claim.claim_category.value, "covered": rules.covered},
+        )
+    ):
+        return result
 
     # --- 2. Submission deadline (only when submission_date is provided) -----
     if claim.submission_date:
@@ -200,9 +238,9 @@ def adjudicate(
         )
 
     # --- 5. Exclusions (short-circuits everything) ---------------------------
-    exclusion_matches = match_exclusions_deterministic(
-        policy.excluded_conditions, *clinical
-    )
+    # Tags, not raw text: extraction mapped the clinical content onto the
+    # policy's exclusion vocabulary; the engine only consumes that mapping.
+    exclusion_matches = tags.exclusions
     if exclusion_matches:
         matched = exclusion_matches[0]
         add_check(
@@ -213,14 +251,14 @@ def adjudicate(
                 hard_fail=True,
                 reason=(
                     f"Treatment relates to '{matched.matched_text}', which falls under "
-                    f"the policy exclusion '{matched.policy_entry}'. Excluded conditions "
+                    f"the policy exclusion '{matched.entry}'. Excluded conditions "
                     f"are never payable under this policy."
                 ),
                 detail={
-                    "policy_entry": matched.policy_entry,
+                    "policy_entry": matched.entry,
                     "matched_text": matched.matched_text,
                     "via": matched.via,
-                    "all_matches": [m.policy_entry for m in exclusion_matches],
+                    "all_matches": [m.entry for m in exclusion_matches],
                 },
             )
         )
@@ -240,7 +278,7 @@ def adjudicate(
     )
 
     # --- 6. Specific-condition waiting periods --------------------------------
-    matched_conditions = match_conditions(*clinical)
+    matched_conditions = tags.conditions
     if join_date and matched_conditions:
         waiting_results = check_specific_waiting_periods(
             join_date,
@@ -447,6 +485,10 @@ def _adjudicate_line_items(
     Only categories with explicit covered/excluded procedure lists (dental,
     vision) adjudicate per item; other categories treat all items as eligible
     (claim-level exclusions have already run by this point).
+
+    Matching: an item tagged by extraction (matched_policy_item — a verbatim
+    policy procedure) is judged by exact membership; untagged items fall back
+    to normalized containment against the policy lists.
     """
     covered = [normalize(p) for p in rules.covered_procedures + rules.covered_items]
     excluded = [normalize(p) for p in rules.excluded_procedures + rules.excluded_items]
@@ -457,8 +499,13 @@ def _adjudicate_line_items(
         return line_items
 
     for li in line_items:
-        desc = normalize(li.description)
-        if any(e and (e in desc or desc in e) for e in excluded):
+        if li.matched_policy_item:
+            # Tagged by extraction: the tag IS the policy entry — exact check.
+            is_excluded = normalize(li.matched_policy_item) in excluded
+        else:
+            desc = normalize(li.description)
+            is_excluded = any(e and (e in desc or desc in e) for e in excluded)
+        if is_excluded:
             li.status = LineItemStatus.REJECTED
             li.approved_amount = 0
             li.rejection_reason = (

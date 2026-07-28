@@ -1,17 +1,21 @@
 """Policy loader: the single source of truth for all coverage rules.
 
 Every rule the AdjudicationEngine applies comes from `policy_terms.json`
-through this module. Nothing about coverage, limits, waiting periods or
-exclusions is hardcoded anywhere else in the codebase — swap the JSON file
-and the system's behavior changes accordingly.
+through this module. Nothing about coverage, limits, waiting periods,
+exclusions or matching vocabulary is hardcoded anywhere else in the
+codebase — swap the JSON file and the system's behavior changes accordingly.
+
+Matching aliases ship pre-normalized (see app/rules/textnorm.normalize) so
+the per-claim matchers never re-normalize static policy text.
 """
 
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from app.contracts.enums import ClaimCategory, DocumentType
+from app.rules.textnorm import normalize
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
@@ -108,6 +112,27 @@ class Policy(BaseModel):
     @property
     def excluded_conditions(self) -> list[str]:
         return list(self.raw["exclusions"]["conditions"])
+
+    @cached_property
+    def condition_aliases(self) -> dict[str, list[str]]:
+        """Condition key -> normalized alias phrases (normalized once, cached)."""
+        return {
+            key: [normalize(a) for a in aliases]
+            for key, aliases in self.raw.get("matching_aliases", {}).get("conditions", {}).items()
+        }
+
+    @cached_property
+    def exclusion_aliases(self) -> dict[str, list[str]]:
+        """Verbatim policy exclusion entry -> normalized alias phrases."""
+        return {
+            entry: [normalize(a) for a in aliases]
+            for entry, aliases in self.raw.get("matching_aliases", {}).get("exclusions", {}).items()
+        }
+
+    @cached_property
+    def network_hospitals_normalized(self) -> list[str]:
+        """Network hospital names, pre-normalized for containment matching."""
+        return [normalize(h) for h in self.network_hospitals]
 
     @property
     def network_hospitals(self) -> list[str]:

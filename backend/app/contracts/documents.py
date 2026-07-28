@@ -55,6 +55,33 @@ class LineItem(BaseModel):
     status: str = Field(default="PENDING", description="PENDING | APPROVED | REJECTED")
     rejection_reason: str | None = None
     approved_amount: float | None = None
+    matched_policy_item: str | None = Field(
+        default=None,
+        description="Verbatim policy procedure/item this line maps to (set by tagging)",
+    )
+
+
+class PolicyTag(BaseModel):
+    """A semantic match from document text to a policy vocabulary entry.
+
+    `via` records provenance so the audit trail shows exactly how the match
+    was found: the deterministic alias matcher, the LLM's semantic read, or
+    both agreeing.
+    """
+
+    entry: str = Field(..., description="Verbatim policy entry (exclusion text / procedure)")
+    matched_text: str = Field(..., description="The document text that triggered the match")
+    via: str = Field(..., description="'deterministic' | 'llm' | 'both'")
+
+
+class DocumentTags(BaseModel):
+    """Semantic tags for one document: its clinical content mapped onto the
+    policy vocabulary. Perception output — adjudication only consumes these."""
+
+    conditions: list[str] = Field(
+        default_factory=list, description="Policy specific-condition keys (e.g. 'diabetes')"
+    )
+    exclusions: list[PolicyTag] = Field(default_factory=list)
 
 
 class ExtractedDocument(BaseModel):
@@ -86,6 +113,12 @@ class ExtractedDocument(BaseModel):
 
     overall_confidence: float = Field(default=1.0, ge=0, le=1)
     unreadable_fields: list[str] = Field(default_factory=list)
+    # None = never tagged (e.g. constructed outside the pipeline); adjudication
+    # then tags deterministically. Empty tags = tagged, nothing matched.
+    tags: DocumentTags | None = Field(
+        default=None,
+        description="Clinical content mapped onto the policy vocabulary",
+    )
     raw_content: dict[str, Any] = Field(
         default_factory=dict, description="Source content (provided mode) or raw LLM JSON"
     )

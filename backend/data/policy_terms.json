@@ -185,6 +185,31 @@
     "auto_manual_review_above": 25000,
     "fraud_score_manual_review_threshold": 0.80
   },
+  "matching_aliases": {
+    "conditions": {
+      "diabetes": ["diabetes", "diabetic", "t2dm", "t1dm", "type 2 diabetes", "type 1 diabetes"],
+      "hypertension": ["hypertension", "htn", "high blood pressure"],
+      "thyroid_disorders": ["thyroid", "hypothyroid", "hyperthyroid"],
+      "joint_replacement": ["joint replacement", "knee replacement", "hip replacement", "arthroplasty"],
+      "maternity": ["maternity", "pregnancy", "pregnant", "delivery", "obstetric", "antenatal"],
+      "mental_health": ["mental health", "depression", "anxiety disorder", "psychiatric"],
+      "obesity_treatment": ["obesity", "obese", "bariatric", "weight loss", "morbid obesity"],
+      "hernia": ["hernia"],
+      "cataract": ["cataract"]
+    },
+    "exclusions": {
+      "Self-inflicted injuries": ["self inflicted", "self harm", "suicide"],
+      "War or nuclear hazard": ["war", "nuclear hazard"],
+      "Substance abuse treatment": ["substance abuse", "drug abuse", "alcohol abuse", "alcoholism", "de addiction", "rehabilitation"],
+      "Experimental treatments": ["experimental treatment", "clinical trial"],
+      "Infertility and assisted reproduction": ["infertility", "ivf", "in vitro fertilization", "assisted reproduction"],
+      "Obesity and weight loss programs": ["obesity", "obese", "weight loss", "weight management", "slimming", "diet program", "diet plan", "diet and nutrition", "nutrition program"],
+      "Bariatric surgery": ["bariatric"],
+      "Cosmetic or aesthetic procedures": ["cosmetic", "aesthetic", "teeth whitening", "whitening", "veneers", "bleaching"],
+      "Vaccination (non-medically necessary)": ["vaccination", "vaccine", "immunization"],
+      "Health supplements and tonics": ["health supplement", "supplements", "tonic", "multivitamin"]
+    }
+  },
   "members": [
     {
       "member_id": "EMP001",

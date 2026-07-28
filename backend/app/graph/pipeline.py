@@ -82,7 +82,8 @@ def extract_documents_node(state: ClaimState) -> dict:
         result = run_resilient(
             "ExtractionAgent",
             lambda doc=doc: extract_documents(
-                [doc], state["classified_documents"], trace, llm=state.get("llm")
+                [doc], state["classified_documents"], trace,
+                state["policy"], llm=state.get("llm"),
             ),
             lambda: [],
             trace,

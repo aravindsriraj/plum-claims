@@ -1,27 +1,36 @@
-"""ExtractionAgent: turns each verified document into structured data.
+"""ExtractionAgent: turns each verified document into structured, tagged data.
 
 Two modes, selected per document:
   - PROVIDED_CONTENT: the caller supplied extracted content (eval harness).
     It is normalized through the same Pydantic schema as vision output, so
-    downstream components cannot tell the difference.
+    downstream components cannot tell the difference. Clinical text is tagged
+    by the deterministic matcher (evals stay LLM-free).
   - VISION_LLM: a vision model reads the actual file. Messy inputs (handwriting,
     stamps, blur) are handled by instructing the model to mark illegible fields
     as unreadable rather than guess — degraded confidence, not wrong data.
+    The model's semantic tags are validated against the policy vocabulary and
+    merged with the deterministic matcher's tags (union; disagreements flagged).
 
-This agent NEVER judges coverage. It only reports what the document says.
+This agent NEVER judges coverage. It reports what the document says and how
+that content maps onto the policy vocabulary — adjudication decides the rest.
 """
-
-from datetime import date
-from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.contracts.documents import ClassifiedDocument, ExtractedDocument, LineItem
-from app.contracts.enums import DocumentQuality, DocumentType, ExtractionMethod
+from app.contracts.documents import (
+    ClassifiedDocument,
+    DocumentTags,
+    ExtractedDocument,
+    LineItem,
+)
+from app.contracts.enums import DocumentQuality, ExtractionMethod
 from app.contracts.inputs import DocumentInput
 from app.llm.client import LlmClient
 from app.llm.prompts import DOCUMENT_EXTRACTION_PROMPT
 from app.observability.trace import TraceRecorder
+from app.policy.loader import Policy
+from app.rules.tagging import tag_deterministic
+from app.util import parse_iso_date
 
 COMPONENT = "ExtractionAgent"
 
@@ -47,18 +56,11 @@ class LlmExtraction(BaseModel):
     overall_confidence: float = Field(default=0.8, ge=0, le=1)
 
 
-def _parse_date(value: Any) -> date | None:
-    """Best-effort ISO date parse; anything else becomes None + unreadable."""
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value)[:10])
-    except ValueError:
-        return None
-
-
-def _from_provided_content(doc: DocumentInput, classified: ClassifiedDocument) -> ExtractedDocument:
-    """Normalize caller-supplied content (eval/simulation mode)."""
+def _from_provided_content(
+    doc: DocumentInput, classified: ClassifiedDocument, policy: Policy
+) -> ExtractedDocument:
+    """Normalize caller-supplied content (eval/simulation mode) and tag it
+    with the deterministic matcher — evals exercise the production fallback."""
     content = doc.content or {}
     line_items = [
         LineItem(description=str(li.get("description", "")), amount=float(li.get("amount", 0)))
@@ -71,8 +73,9 @@ def _from_provided_content(doc: DocumentInput, classified: ClassifiedDocument) -
         patient_name=content.get("patient_name") or classified.patient_name_on_doc,
         doctor_name=content.get("doctor_name"),
         doctor_registration=content.get("doctor_registration"),
-        provider_name=content.get("hospital_name") or content.get("provider_name"),
-        document_date=_parse_date(content.get("date")),
+        # Canonical key is provider_name; hospital_name kept as a deprecated alias.
+        provider_name=content.get("provider_name") or content.get("hospital_name"),
+        document_date=parse_iso_date(content.get("date")),
         diagnosis=content.get("diagnosis"),
         treatment=content.get("treatment"),
         medicines=list(content.get("medicines", [])),
@@ -86,6 +89,9 @@ def _from_provided_content(doc: DocumentInput, classified: ClassifiedDocument) -
         overall_confidence=1.0 if classified.quality == DocumentQuality.GOOD else 0.7,
         raw_content=dict(content),
     )
+    extracted.tags = tag_deterministic(
+        policy, extracted.diagnosis, extracted.treatment, *extracted.tests_ordered
+    )
     return extracted
 
 
@@ -93,6 +99,7 @@ def extract_documents(
     documents: list[DocumentInput],
     classified: list[ClassifiedDocument],
     trace: TraceRecorder,
+    policy: Policy,
     llm: LlmClient | None = None,
 ) -> list[ExtractedDocument]:
     """Extract structured data from every document.
@@ -123,7 +130,7 @@ def extract_documents(
                 doctor_name=out.doctor_name,
                 doctor_registration=out.doctor_registration,
                 provider_name=out.provider_name,
-                document_date=_parse_date(out.document_date),
+                document_date=parse_iso_date(out.document_date),
                 diagnosis=out.diagnosis,
                 treatment=out.treatment,
                 medicines=out.medicines,
@@ -133,8 +140,11 @@ def extract_documents(
                 overall_confidence=out.overall_confidence,
                 unreadable_fields=out.unreadable_fields,
             )
+            extracted.tags = tag_deterministic(
+                policy, extracted.diagnosis, extracted.treatment, *extracted.tests_ordered
+            )
         elif doc.content is not None:
-            extracted = _from_provided_content(doc, cd)
+            extracted = _from_provided_content(doc, cd, policy)
         else:
             # Metadata-only document (eval cases that stop before extraction):
             # an empty shell so downstream stages see the file existed.
@@ -144,6 +154,7 @@ def extract_documents(
                 method=ExtractionMethod.METADATA,
                 patient_name=cd.patient_name_on_doc,
                 overall_confidence=0.5,
+                tags=DocumentTags(),
             )
 
         trace.record(

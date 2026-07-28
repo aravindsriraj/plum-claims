@@ -9,23 +9,14 @@ unit-tested (TC010 pins it):
       -> COPAY              (member co-pay percentage)
 
 Every step emits an Adjustment with before/after so the money math is fully
-auditable in the trace.
+auditable in the trace. The adjudication engine orchestrates the steps; this
+module owns only the arithmetic.
 """
-
-from pydantic import BaseModel
 
 from app.contracts.decision import Adjustment
 from app.contracts.enums import AdjustmentKind
 from app.policy.loader import OpdCategoryRules
 from app.rules.textnorm import normalize
-
-
-class FinancialResult(BaseModel):
-    eligible_amount: float
-    approved_amount: float
-    adjustments: list[Adjustment]
-    network_hospital: bool
-    notes: list[str] = []
 
 
 def is_network_hospital(provider_name: str | None, network_hospitals: list[str]) -> bool:
@@ -93,37 +84,4 @@ def apply_copay(amount: float, rules: OpdCategoryRules) -> tuple[float, Adjustme
         amount_after=payable,
         note=f"Co-pay ({rules.copay_percent:.0f}%) applied: member bears "
         f"₹{amount - payable:,.0f}, insurer pays ₹{payable:,.0f}.",
-    )
-
-
-def compute_payable(
-    eligible_amount: float,
-    category: str,
-    rules: OpdCategoryRules,
-    provider_name: str | None,
-    network_hospitals: list[str],
-) -> FinancialResult:
-    """Run the full adjustment pipeline for one claim."""
-    adjustments: list[Adjustment] = []
-    notes: list[str] = []
-    network = is_network_hospital(provider_name, network_hospitals)
-    if network:
-        notes.append(f"Provider '{provider_name}' is a network hospital.")
-
-    amount, adj = apply_sub_limit(eligible_amount, category, rules)
-    if adj:
-        adjustments.append(adj)
-    amount, adj = apply_network_discount(amount, network, rules)
-    if adj:
-        adjustments.append(adj)
-    amount, adj = apply_copay(amount, rules)
-    if adj:
-        adjustments.append(adj)
-
-    return FinancialResult(
-        eligible_amount=eligible_amount,
-        approved_amount=round(amount, 2),
-        adjustments=adjustments,
-        network_hospital=network,
-        notes=notes,
     )

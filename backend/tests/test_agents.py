@@ -131,7 +131,7 @@ class TestExtraction:
         from app.agents.document_verification import classify_document
 
         classified = [classify_document(documents[0], None)]
-        [extracted] = extract_documents(documents, classified, TraceRecorder())
+        [extracted] = extract_documents(documents, classified, TraceRecorder(), POLICY)
         assert extracted.patient_name == "Rajesh Kumar"
         assert extracted.provider_name == "City Clinic, Bengaluru"
         assert extracted.document_date == date(2024, 11, 1)
@@ -144,7 +144,7 @@ class TestExtraction:
         from app.agents.document_verification import classify_document
 
         classified = [classify_document(documents[0], None)]
-        [extracted] = extract_documents(documents, classified, TraceRecorder())
+        [extracted] = extract_documents(documents, classified, TraceRecorder(), POLICY)
         assert extracted.patient_name == "X"
         assert extracted.overall_confidence == 0.5
 

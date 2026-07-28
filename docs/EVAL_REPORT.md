@@ -1,6 +1,6 @@
 # Eval Report — 12 Test Cases
 
-Generated: 2026-07-28T12:10:09  
+Generated: 2026-07-28T13:38:24  
 Result: **12/12 passed** (deterministic run, no LLM calls — documents use provided-content/metadata modes)
 
 | Case | Name | Expected | Actual | Result |
@@ -32,7 +32,7 @@ Result: **12/12 passed** (deterministic run, no LLM calls — documents use prov
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-ADA6D191: DOCUMENT_REJECTED.
+Claim CLM-EE6D1C43: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'dr_sharma_prescription.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.
@@ -60,7 +60,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-02EBFD2D: DOCUMENT_REJECTED.
+Claim CLM-9047A15D: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [UNREADABLE_DOCUMENT] We couldn't read your pharmacy bill ('blurry_bill.jpg') — the image is too blurry or damaged. Please re-upload a clear photo of that same document. Your claim has NOT been rejected; it will continue once we can read this document.
@@ -86,7 +86,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-D7E0AFFF: DOCUMENT_REJECTED.
+Claim CLM-7526EC43: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [PATIENT_MISMATCH] Your documents appear to belong to different people: 'prescription_rajesh.jpg' belongs to Rajesh Kumar; 'bill_arjun.jpg' belongs to Arjun Mehta. Please upload documents for Rajesh Kumar only.
@@ -111,7 +111,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-E83629F3: DECIDED.
+Claim CLM-F30C7CEF: DECIDED.
 
 Decision: APPROVED — approved ₹1,350 of ₹1,500 (confidence 0.98).
   All checks passed. Approved ₹1,350 of ₹1,500.
@@ -130,19 +130,20 @@ Pipeline trace:
     9. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹1,500).
    10. [PASS] CrossValidationAgent: Prescription present.
    11. [PASS] AdjudicationEngine: Member validity: Member EMP001 found in policy roster.
-   12. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   13. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹1,500 meets the minimum of ₹500.
-   14. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-01 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   15. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   16. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   17. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
-   18. [PASS] AdjudicationEngine: Per-claim limit: Claimed ₹1,500 is within the per-claim limit of ₹5,000.
-   19. [PASS] AdjudicationEngine: COPAY: ₹1,500 -> ₹1,350. Co-pay (10%) applied: member bears ₹150, insurer pays ₹1,350.
-   20. [PASS] AdjudicationEngine: Financial summary: eligible ₹1,500 -> approved ₹1,350.
-   21. [PASS] FraudAgent: No fraud signals detected.
-   22. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   23. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   24. [PASS] DecisionSynthesizer: Decision: APPROVED — approved ₹1,350, confidence 0.98.
+   12. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
+   13. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   14. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹1,500 meets the minimum of ₹500.
+   15. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-01 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   16. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   17. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   18. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
+   19. [PASS] AdjudicationEngine: Per-claim limit: Claimed ₹1,500 is within the per-claim limit of ₹5,000.
+   20. [PASS] AdjudicationEngine: COPAY: ₹1,500 -> ₹1,350. Co-pay (10%) applied: member bears ₹150, insurer pays ₹1,350.
+   21. [PASS] AdjudicationEngine: Financial summary: eligible ₹1,500 -> approved ₹1,350.
+   22. [PASS] FraudAgent: No fraud signals detected.
+   23. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   24. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   25. [PASS] DecisionSynthesizer: Decision: APPROVED — approved ₹1,350, confidence 0.98.
 ```
 </details>
 
@@ -157,7 +158,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-926DDB72: DECIDED.
+Claim CLM-45FFCD80: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹3,000 (confidence 0.98).
   diabetes: 90-day waiting period not served. Eligible from 2024-11-30.
@@ -174,15 +175,16 @@ Pipeline trace:
     9. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹3,000).
    10. [PASS] CrossValidationAgent: Prescription present.
    11. [PASS] AdjudicationEngine: Member validity: Member EMP005 found in policy roster.
-   12. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   13. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹3,000 meets the minimum of ₹500.
-   14. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-15 is on/after the end of the 30-day initial waiting period (2024-10-01).
-   15. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   16. [FAIL] AdjudicationEngine: Waiting period — diabetes: diabetes: 90-day waiting period not served. Eligible from 2024-11-30.
-   17. [PASS] FraudAgent: No fraud signals detected.
-   18. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   19. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   20. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
+   12. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
+   13. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   14. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹3,000 meets the minimum of ₹500.
+   15. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-15 is on/after the end of the 30-day initial waiting period (2024-10-01).
+   16. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   17. [FAIL] AdjudicationEngine: Waiting period — diabetes: diabetes: 90-day waiting period not served. Eligible from 2024-11-30.
+   18. [PASS] FraudAgent: No fraud signals detected.
+   19. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   20. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   21. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
 ```
 </details>
 
@@ -196,7 +198,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-C018D48B: DECIDED.
+Claim CLM-08ADF592: DECIDED.
 
 Decision: PARTIAL — approved ₹8,000 of ₹12,000 (confidence 0.98).
   Approved ₹8,000 of ₹12,000.
@@ -212,20 +214,21 @@ Pipeline trace:
     6. [PASS] CrossValidationAgent: Document dates checked against treatment date.
     7. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹12,000).
     8. [PASS] AdjudicationEngine: Member validity: Member EMP002 found in policy roster.
-    9. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   10. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹12,000 meets the minimum of ₹500.
-   11. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-15 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   12. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   13. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   14. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
-   15. [SKIP] AdjudicationEngine: Per-claim limit: governs CONSULTATION claims; DENTAL is bounded by its category sub-limit (₹10,000).
-   16. [PASS] AdjudicationEngine: Line item approved: 'Root Canal Treatment' ₹8,000.
-   17. [FAIL] AdjudicationEngine: Line item rejected: 'Teeth Whitening' ₹4,000 — 'Teeth Whitening' is in the policy's excluded dental procedures list.
-   18. [PASS] AdjudicationEngine: Financial summary: eligible ₹8,000 -> approved ₹8,000.
-   19. [PASS] FraudAgent: No fraud signals detected.
-   20. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   21. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   22. [WARN] DecisionSynthesizer: Decision: PARTIAL — approved ₹8,000, confidence 0.98.
+    9. [PASS] AdjudicationEngine: Category coverage: DENTAL is a covered category under this policy.
+   10. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   11. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹12,000 meets the minimum of ₹500.
+   12. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-15 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   13. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   14. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   15. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
+   16. [SKIP] AdjudicationEngine: Per-claim limit: governs CONSULTATION claims; DENTAL is bounded by its category sub-limit (₹10,000).
+   17. [PASS] AdjudicationEngine: Line item approved: 'Root Canal Treatment' ₹8,000.
+   18. [FAIL] AdjudicationEngine: Line item rejected: 'Teeth Whitening' ₹4,000 — 'Teeth Whitening' is in the policy's excluded dental procedures list.
+   19. [PASS] AdjudicationEngine: Financial summary: eligible ₹8,000 -> approved ₹8,000.
+   20. [PASS] FraudAgent: No fraud signals detected.
+   21. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   22. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   23. [WARN] DecisionSynthesizer: Decision: PARTIAL — approved ₹8,000, confidence 0.98.
 ```
 </details>
 
@@ -241,7 +244,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-7C945F94: DECIDED.
+Claim CLM-F13615D7: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹15,000 (confidence 0.98).
   'MRI Lumbar Spine' (₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
@@ -260,16 +263,17 @@ Pipeline trace:
    11. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹15,000).
    12. [PASS] CrossValidationAgent: Prescription present.
    13. [PASS] AdjudicationEngine: Member validity: Member EMP007 found in policy roster.
-   14. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   15. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹15,000 meets the minimum of ₹500.
-   16. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-02 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   17. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   18. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   19. [FAIL] AdjudicationEngine: Pre-authorization: 'MRI Lumbar Spine' (₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
-   20. [PASS] FraudAgent: No fraud signals detected.
-   21. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   22. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   23. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
+   14. [PASS] AdjudicationEngine: Category coverage: DIAGNOSTIC is a covered category under this policy.
+   15. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   16. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹15,000 meets the minimum of ₹500.
+   17. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-02 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   18. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   19. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   20. [FAIL] AdjudicationEngine: Pre-authorization: 'MRI Lumbar Spine' (₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
+   21. [PASS] FraudAgent: No fraud signals detected.
+   22. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   23. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   24. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
 ```
 </details>
 
@@ -285,7 +289,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-56ABB513: DECIDED.
+Claim CLM-8EEBFFB8: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹7,500 (confidence 0.98).
   Claimed amount ₹7,500 exceeds the per-claim limit of ₹5,000.
@@ -302,17 +306,18 @@ Pipeline trace:
     9. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹7,500).
    10. [PASS] CrossValidationAgent: Prescription present.
    11. [PASS] AdjudicationEngine: Member validity: Member EMP003 found in policy roster.
-   12. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   13. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹7,500 meets the minimum of ₹500.
-   14. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-20 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   15. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   16. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   17. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
-   18. [FAIL] AdjudicationEngine: Per-claim limit: Claimed amount ₹7,500 exceeds the per-claim limit of ₹5,000.
-   19. [PASS] FraudAgent: No fraud signals detected.
-   20. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   21. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   22. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
+   12. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
+   13. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   14. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹7,500 meets the minimum of ₹500.
+   15. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-20 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   16. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   17. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   18. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
+   19. [FAIL] AdjudicationEngine: Per-claim limit: Claimed amount ₹7,500 exceeds the per-claim limit of ₹5,000.
+   20. [PASS] FraudAgent: No fraud signals detected.
+   21. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   22. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   23. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
 ```
 </details>
 
@@ -328,7 +333,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-89A615CC: DECIDED.
+Claim CLM-20991579: DECIDED.
 
 Decision: MANUAL_REVIEW — approved ₹0 of ₹4,800 (confidence 0.98).
   Routed to manual review due to fraud/risk signals:
@@ -349,20 +354,21 @@ Pipeline trace:
     9. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹4,800).
    10. [PASS] CrossValidationAgent: Prescription present.
    11. [PASS] AdjudicationEngine: Member validity: Member EMP008 found in policy roster.
-   12. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   13. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹4,800 meets the minimum of ₹500.
-   14. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-30 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   15. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   16. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   17. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
-   18. [PASS] AdjudicationEngine: Per-claim limit: Claimed ₹4,800 is within the per-claim limit of ₹5,000.
-   19. [PASS] AdjudicationEngine: SUB_LIMIT_CAP: ₹4,800 -> ₹2,000. CONSULTATION sub-limit of ₹2,000 applied (₹4,800 capped to ₹2,000).
-   20. [PASS] AdjudicationEngine: COPAY: ₹2,000 -> ₹1,800. Co-pay (10%) applied: member bears ₹200, insurer pays ₹1,800.
-   21. [PASS] AdjudicationEngine: Financial summary: eligible ₹4,800 -> approved ₹1,800.
-   22. [WARN] FraudAgent: SAME_DAY_VELOCITY: This is claim #4 from member EMP008 on 2024-10-30 (policy limit: 2/day). Prior same-day claims: CLM_0081 ₹1,200 at City Clinic A, CLM_0082 ₹1,800 at City Clinic B, CLM_0083 ₹2,100 at Wellness Center
-   23. [PASS] FraudAgent: Fraud score 0.70; manual review REQUIRED.
-   24. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   25. [WARN] DecisionSynthesizer: Decision: MANUAL_REVIEW — approved ₹0, confidence 0.98.
+   12. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
+   13. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   14. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹4,800 meets the minimum of ₹500.
+   15. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-30 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   16. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   17. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   18. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
+   19. [PASS] AdjudicationEngine: Per-claim limit: Claimed ₹4,800 is within the per-claim limit of ₹5,000.
+   20. [PASS] AdjudicationEngine: SUB_LIMIT_CAP: ₹4,800 -> ₹2,000. CONSULTATION sub-limit of ₹2,000 applied (₹4,800 capped to ₹2,000).
+   21. [PASS] AdjudicationEngine: COPAY: ₹2,000 -> ₹1,800. Co-pay (10%) applied: member bears ₹200, insurer pays ₹1,800.
+   22. [PASS] AdjudicationEngine: Financial summary: eligible ₹4,800 -> approved ₹1,800.
+   23. [WARN] FraudAgent: SAME_DAY_VELOCITY: This is claim #4 from member EMP008 on 2024-10-30 (policy limit: 2/day). Prior same-day claims: CLM_0081 ₹1,200 at City Clinic A, CLM_0082 ₹1,800 at City Clinic B, CLM_0083 ₹2,100 at Wellness Center
+   24. [PASS] FraudAgent: Fraud score 0.70; manual review REQUIRED.
+   25. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   26. [WARN] DecisionSynthesizer: Decision: MANUAL_REVIEW — approved ₹0, confidence 0.98.
 ```
 </details>
 
@@ -376,7 +382,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-C8A3AD11: DECIDED.
+Claim CLM-CBC2EB06: DECIDED.
 
 Decision: APPROVED — approved ₹3,240 of ₹4,500 (confidence 0.98).
   All checks passed. Approved ₹3,240 of ₹4,500.
@@ -396,21 +402,22 @@ Pipeline trace:
     9. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹4,500).
    10. [PASS] CrossValidationAgent: Prescription present.
    11. [PASS] AdjudicationEngine: Member validity: Member EMP010 found in policy roster.
-   12. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   13. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹4,500 meets the minimum of ₹500.
-   14. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-03 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   15. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   16. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   17. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
-   18. [PASS] AdjudicationEngine: Per-claim limit: Claimed ₹4,500 is within the per-claim limit of ₹5,000.
-   19. [PASS] AdjudicationEngine: Provider 'Apollo Hospitals' is a network hospital.
-   20. [PASS] AdjudicationEngine: NETWORK_DISCOUNT: ₹4,500 -> ₹3,600. Network discount (20%) applied: ₹4,500 -> ₹3,600.
-   21. [PASS] AdjudicationEngine: COPAY: ₹3,600 -> ₹3,240. Co-pay (10%) applied: member bears ₹360, insurer pays ₹3,240.
-   22. [PASS] AdjudicationEngine: Financial summary: eligible ₹4,500 -> approved ₹3,240.
-   23. [PASS] FraudAgent: No fraud signals detected.
-   24. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   25. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   26. [PASS] DecisionSynthesizer: Decision: APPROVED — approved ₹3,240, confidence 0.98.
+   12. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
+   13. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   14. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹4,500 meets the minimum of ₹500.
+   15. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-03 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   16. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   17. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   18. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
+   19. [PASS] AdjudicationEngine: Per-claim limit: Claimed ₹4,500 is within the per-claim limit of ₹5,000.
+   20. [PASS] AdjudicationEngine: Provider 'Apollo Hospitals' is a network hospital.
+   21. [PASS] AdjudicationEngine: NETWORK_DISCOUNT: ₹4,500 -> ₹3,600. Network discount (20%) applied: ₹4,500 -> ₹3,600.
+   22. [PASS] AdjudicationEngine: COPAY: ₹3,600 -> ₹3,240. Co-pay (10%) applied: member bears ₹360, insurer pays ₹3,240.
+   23. [PASS] AdjudicationEngine: Financial summary: eligible ₹4,500 -> approved ₹3,240.
+   24. [PASS] FraudAgent: No fraud signals detected.
+   25. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   26. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   27. [PASS] DecisionSynthesizer: Decision: APPROVED — approved ₹3,240, confidence 0.98.
 ```
 </details>
 
@@ -426,7 +433,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-3C229AE0: DECIDED.
+Claim CLM-93000D67: DECIDED.
 
 Decision: APPROVED — approved ₹4,000 of ₹4,000 (confidence 0.73).
   All checks passed. Approved ₹4,000 of ₹4,000.
@@ -441,18 +448,19 @@ Pipeline trace:
     6. [PASS] ExtractionAgent: F022: extracted via PROVIDED_CONTENT (confidence 1.00)
     7. [FAIL] CrossValidationAgent: Component failed and was skipped: RuntimeError: Simulated component failure (fault injection). Fallback: consistency checks skipped; decision made on extracted data only.
     8. [PASS] AdjudicationEngine: Member validity: Member EMP006 found in policy roster.
-    9. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   10. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹4,000 meets the minimum of ₹500.
-   11. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-28 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   12. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   13. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   14. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
-   15. [SKIP] AdjudicationEngine: Per-claim limit: governs CONSULTATION claims; ALTERNATIVE_MEDICINE is bounded by its category sub-limit (₹8,000).
-   16. [PASS] AdjudicationEngine: Financial summary: eligible ₹4,000 -> approved ₹4,000.
-   17. [PASS] FraudAgent: No fraud signals detected.
-   18. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   19. [PASS] DecisionSynthesizer: Confidence computed: 0.73 (extraction quality x component-failure penalties).
-   20. [PASS] DecisionSynthesizer: Decision: APPROVED — approved ₹4,000, confidence 0.73.
+    9. [PASS] AdjudicationEngine: Category coverage: ALTERNATIVE_MEDICINE is a covered category under this policy.
+   10. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   11. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹4,000 meets the minimum of ₹500.
+   12. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-28 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   13. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   14. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   15. [PASS] AdjudicationEngine: Pre-authorization: No pre-authorization required for this claim.
+   16. [SKIP] AdjudicationEngine: Per-claim limit: governs CONSULTATION claims; ALTERNATIVE_MEDICINE is bounded by its category sub-limit (₹8,000).
+   17. [PASS] AdjudicationEngine: Financial summary: eligible ₹4,000 -> approved ₹4,000.
+   18. [PASS] FraudAgent: No fraud signals detected.
+   19. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   20. [PASS] DecisionSynthesizer: Confidence computed: 0.73 (extraction quality x component-failure penalties).
+   21. [PASS] DecisionSynthesizer: Decision: APPROVED — approved ₹4,000, confidence 0.73.
 ```
 </details>
 
@@ -468,7 +476,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-8A341B28: DECIDED.
+Claim CLM-6203CA5C: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹8,000 (confidence 0.98).
   Treatment relates to 'Morbid Obesity — BMI 37', which falls under the policy exclusion 'Obesity and weight loss programs'. Excluded conditions are never payable under this policy.
@@ -485,14 +493,15 @@ Pipeline trace:
     9. [PASS] CrossValidationAgent: Claimed amount matches bill total (₹8,000).
    10. [PASS] CrossValidationAgent: Prescription present.
    11. [PASS] AdjudicationEngine: Member validity: Member EMP009 found in policy roster.
-   12. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   13. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹8,000 meets the minimum of ₹500.
-   14. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-18 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   15. [FAIL] AdjudicationEngine: Policy exclusions: Treatment relates to 'Morbid Obesity — BMI 37', which falls under the policy exclusion 'Obesity and weight loss programs'. Excluded conditions are never payable under this policy.
-   16. [SKIP] AdjudicationEngine: Claim excluded — remaining hard checks not evaluated (an excluded condition is never payable).
-   17. [PASS] FraudAgent: No fraud signals detected.
-   18. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   19. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   20. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
+   12. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
+   13. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   14. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹8,000 meets the minimum of ₹500.
+   15. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-10-18 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   16. [FAIL] AdjudicationEngine: Policy exclusions: Treatment relates to 'Morbid Obesity — BMI 37', which falls under the policy exclusion 'Obesity and weight loss programs'. Excluded conditions are never payable under this policy.
+   17. [SKIP] AdjudicationEngine: Claim excluded — remaining hard checks not evaluated (an excluded condition is never payable).
+   18. [PASS] FraudAgent: No fraud signals detected.
+   19. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   20. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   21. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
 ```
 </details>

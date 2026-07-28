@@ -24,8 +24,15 @@ def contains_phrase(haystack: str | None, phrase: str) -> bool:
     but NOT 'lumbar disc herniation' (a spinal condition, not a hernia), and
     'joint' alone must never satisfy a 'joint replacement' check.
     """
-    hay = normalize(haystack)
-    needle = normalize(phrase)
-    if not hay or not needle:
+    return contains_normalized(normalize(haystack), normalize(phrase))
+
+
+def contains_normalized(haystack_norm: str, needle_norm: str) -> bool:
+    """Word-boundary match when both sides are ALREADY normalized.
+
+    The policy loader ships pre-normalized aliases, so per-claim matching
+    normalizes each document text once and reuses it across all needles.
+    """
+    if not haystack_norm or not needle_norm:
         return False
-    return re.search(rf"\b{re.escape(needle)}\b", hay) is not None
+    return re.search(rf"\b{re.escape(needle_norm)}\b", haystack_norm) is not None
