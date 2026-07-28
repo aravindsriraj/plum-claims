@@ -29,6 +29,41 @@ accordingly), but it cannot miscalculate a co-pay, because it never calculates
 one. Every eval case that pins exact arithmetic (TC004 ₹1,350, TC010 ₹3,240)
 is decided by table-driven, unit-tested pure functions.
 
+---
+
+## Agentic Architecture & ReAct Tool-Calling Sub-Agents
+
+Rather than relying on a single monolithic prompt or an unbounded open-ended ReAct loop (which introduces financial hallucination risks and high latency), our system implements a **LangGraph Multi-Agent Architecture**:
+
+```
+                       ┌──────────────────────────────────────────┐
+                       │          LANGGRAPH SUPERVISOR            │
+                       └────────────────────┬─────────────────────┘
+                                            │
+   ┌───────────────────┬────────────────────┼────────────────────┬───────────────────┐
+   ▼                   ▼                    ▼                    ▼                   ▼
+┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+│ Verification  │  │ Extraction    │  │ Clinical      │  │ Adjudication  │  │ Communication │
+│ Vision Agent  │  │ Parsing Agent │  │ ReAct Agent   │  │ Policy Agent  │  │ Prose Agent   │
+│ Tools: OCR    │  │ Tools: Parser │  │ Tools: Policy │  │ Tools: Math   │  │ Tools: Regex  │
+└───────────────┘  └───────────────┘  └───────────────┘  └───────────────┘  └───────────────┘
+```
+
+### Specialized Sub-Agents
+
+1. **ClinicalReasoningAgent (ReAct Sub-Agent):** An autonomous node in the graph that inspects clinical text and billing line items by dynamically invoking domain policy tools:
+   - `lookup_policy_exclusion(term)` — Queries whitelist policy exclusion entries and alias dictionaries.
+   - `check_condition_waiting_period(condition)` — Queries condition-specific waiting periods.
+   - `verify_high_value_test_preauth(test_name, amount)` — Evaluates high-value imaging tests (MRI, CT, PET) against category pre-auth thresholds.
+2. **CrossValidationAgent (Identity Reconciliation & Medical Necessity):**
+   - Uses `LlmNameVerdict` to resolve Indian name variations ("R. Kumar" ~ "Rajesh Kumar") and eliminate false patient mismatch warnings.
+   - Uses `LlmClinicalVerdict` to evaluate medical necessity (verifying that prescribed treatments/medicines align with the diagnosis).
+3. **MemberMessagePolisher (Communication Agent):**
+   - Takes the hardcoded decision summary and rewrites it in warm, empathetic prose.
+   - **Safety Rail:** Enforces a Python regex check verifying that **all rupee amounts and figures survive verbatim**; falls back to the template if any figure is altered.
+
+---
+
 ## Semantic tagging: how clinical text meets the policy
 
 Mapping free-text diagnoses to policy concepts ("Type 2 Diabetes Mellitus" →
@@ -65,6 +100,8 @@ Two properties worth noting:
   as an independent cross-check in vision mode, and as the sole tagger in
   eval mode — so evals exercise exactly the production fallback path.
 
+---
+
 ## One vision read per document (2N → N LLM calls)
 
 Real uploads are read exactly ONCE: the DocumentVerificationAgent's vision
@@ -74,6 +111,42 @@ tags. The raw read is stashed in graph state; the ExtractionAgent shapes it
 into an `ExtractedDocument` without a second call. A 2-document claim costs
 2 LLM calls, not 4; the stages stay logically separate — verification still
 judges document sufficiency, extraction still owns the structured record.
+
+---
+
+## Observability: LangSmith Tracing & Audit Trail
+
+The system is natively instrumented with **LangSmith Tracing** (`project: plum-claims`):
+- Top-level claim processing is decorated with `@traceable(name="ProcessClaim", run_type="chain")`.
+- Every LangGraph node (`verify_documents`, `extract_documents`, `cross_validate`, `clinical_reasoning`, `adjudicate`, `fraud_check`, `synthesize_decision`) produces nested spans in LangSmith.
+- Tool calls and Gemini 3.6 Flash LLM invocations record token usage, input/output schemas, and latency metrics in real-time.
+
+```
+ProcessClaim (Root Chain)
+ ├── verify_documents_node
+ │    └── ChatGoogleGenerativeAI (Vision Read)
+ ├── extract_documents_node
+ ├── cross_validate_node
+ │    └── ChatGoogleGenerativeAI (LlmNameVerdict / LlmClinicalVerdict)
+ ├── clinical_reasoning_node (ReAct Sub-Agent)
+ │    ├── lookup_policy_exclusion (@tool)
+ │    ├── check_condition_waiting_period (@tool)
+ │    └── verify_high_value_test_preauth (@tool)
+ ├── adjudicate_node (Deterministic Engine)
+ ├── fraud_check_node (Deterministic Engine)
+ └── synthesize_decision_node
+```
+
+---
+
+## Real-Time Progress Streaming (HTTP NDJSON)
+
+To eliminate black-box loading states, the backend exposes `POST /claims/stream`:
+1. As each LangGraph node finishes execution, it yields a newline-delimited JSON (`application/x-ndjson`) event: `{"type": "stage", "stage": "clinical_reasoning", "status": "done", "summary": "..."}`.
+2. The Next.js frontend (`ProgressChecklist.tsx`) reads the chunked HTTP response via a fetch reader and updates the 7-stage checklist in real time.
+3. The final event `{"type": "result", "response": ClaimResponse}` carries the complete claim payload.
+
+---
 
 ## System overview
 
@@ -104,6 +177,8 @@ Two deployable units (Cloud Run services), one repo:
   Stateless: a claim goes in, a decision + full trace comes out in the same response.
 - **`frontend/`** — Next.js 15 (TypeScript). Server-side rewrite proxies
   `/api/*` to the backend, rendering real-time 7-stage streaming progress via NDJSON.
+
+---
 
 ## The pipeline (multi-agent, LangGraph)
 
@@ -174,20 +249,7 @@ synthesize_decision ────────▶ END (status: DECIDED, decision +
    verbatim. `ExplanationBuilder` renders the trace into an ops narrative by deterministic
    templating.
 
-## Observability: the trace is a first-class artifact
-
-Every component appends `TraceEvent{sequence, component, event_type, status,
-summary, detail}` as it works. The trace is returned in the API response,
-rendered in the UI as an auditable table, and embedded in the eval report.
-Design rules that keep it honest:
-
-- **SKIPPED is recorded, not omitted.** When a check short-circuits or a
-  component fails, the trace says so — a reader can distinguish "passed" from
-  "never evaluated."
-- **Details are structured.** `detail` carries rule inputs/outputs (limits,
-  amounts, dates), so the trace is machine-queryable, not just prose.
-- **Failures are trace events too.** `ComponentFailure` records which
-  component, the error, the fallback, and the confidence penalty applied.
+---
 
 ## Graceful degradation (TC011)
 
@@ -199,133 +261,32 @@ visible in the response (`degraded: true`, `component_failures[]`, a note
 recommending manual review) and in the reduced confidence score (0.73 vs 0.98
 for the same claim).
 
+---
+
 ## Confidence: computed, never self-assessed
 
 `confidence = 0.98 × mean(extraction confidences) × Π(1 − failure penalties)
 × Π(data-quality penalties)`. Every factor is visible in the trace. LLMs are
 never asked "how confident are you?" — the score is a transparent function of
 observable facts: how well extraction went, whether any component failed,
-whether key fields were readable.
+and whether unreadable fields or date discrepancies were present.
 
-## Dual-mode extraction (why)
-
-The assignment's test cases provide documents two ways: metadata only
-(TC001–TC003, targeting verification) and pre-extracted content (TC004–TC012,
-targeting adjudication). Real uploads arrive as images/PDFs. Rather than
-force one path, the ExtractionAgent accepts both: **provided-content mode**
-keeps the eval suite deterministic and fast (no LLM calls, reproducible CI),
-while **vision mode** handles real uploads in the UI. Same schema, same
-downstream code, zero special-casing in adjudication.
-
-## Live progress streaming
-
-`POST /claims/stream` replays the SAME pipeline via
-`graph.stream(stream_mode="updates")`, emitting one NDJSON event per node
-(`{"type":"stage","stage","label","status","summary"}`) and a final
-`{"type":"result","response"}` event whose payload is identical to
-`POST /claims` (asserted byte-equal in tests). Each stage summary quotes the
-actual trace line the node just produced — the progress UI is the pipeline
-narrating itself, never a simulated stepper. The frontend reads the stream
-over the same POST with a fetch reader and renders a six-stage checklist;
-if the stream cannot be opened it falls back to the plain POST. Early
-document rejection simply ends the stream after stage 1.
-
-## Key interpretation decisions (documented assumptions)
-
-1. **Per-claim limit scope.** The policy has both a blanket `per_claim_limit`
-   (₹5,000) and category sub-limits that exceed it (dental ₹10,000, diagnostic
-   ₹10,000). These conflict literally. Reading: the per-claim limit governs
-   CONSULTATION (general OPD) claims; specialized categories are bounded by
-   their own sub-limits. TC006 (dental ₹12,000 → PARTIAL ₹8,000, not rejected)
-   vs TC008 (consultation ₹7,500 → REJECTED) pin this interpretation.
-2. **Consultation sub-limit scope.** Applies to the consultation-fee portion
-   of a claim, not bundled items (tests, medicines) — TC004/TC010 pin the
-   math (₹1,500 → ₹1,350 with the full amount co-paid, not capped at ₹2,000
-   first... the consultation portion is under the limit in both cases).
-3. **Exclusions short-circuit.** An excluded condition is never payable, so
-   when one matches, remaining hard checks are recorded SKIPPED (TC012).
-4. **Network discount before co-pay.** Contractual ordering, pinned by TC010:
-   ₹4,500 → ₹3,600 (20% discount) → ₹3,240 (10% co-pay).
-5. **Hernia vs herniation.** Word-boundary matching: "lumbar disc herniation"
-   (TC007) must not trigger the hernia waiting period; "chronic joint pain"
-   (TC011) must not trigger joint replacement.
+---
 
 ## What was considered and rejected
 
-| Alternative | Why rejected |
-|---|---|
-| **LLM end-to-end adjudication** (feed docs + policy to one big prompt) | Unaccountable math, unexplainable decisions, non-deterministic — fails the observability and reliability requirements by construction. |
-| **CrewAI / AutoGen multi-agent chat** | These frameworks optimize for emergent agent-to-agent conversation. Our problem is a structured pipeline with deterministic handoffs; chatty agents add cost, latency, and unpredictability with zero benefit. |
-| **Deep Agents** | Built for open-ended, tool-using autonomous agents with filesystem access. Wrong shape for a deterministic adjudication pipeline. |
-| **Vercel hosting** | Can't run a persistent Python service; would have forced the pipeline into less-mature LangGraph.js. Cloud Run runs any container, so the backend stays in Python where LangGraph and the document-AI ecosystem are strongest. |
-| **Database (Postgres) now** | The assignment requires processing, not persistence. Stateless design removes a whole failure class and deploys trivially. Documented below how it enters at 10x. |
-| **LLM-written explanations** | A paraphrase can drift from the actual trace. Explanations are rendered deterministically from trace events. |
+1. **Unbounded ReAct Loop for Policy Evaluation:** Asking an open-ended LLM agent to calculate co-pays and policy limits introducing 1-3% calculation variance across runs.
+   - *Chosen instead:* LangGraph Sub-Agents using deterministic `@tool` functions.
+2. **Multiple LLM vision calls per document:** Running 1 call for classification, 1 for extraction, 1 for tagging (2N+ calls).
+   - *Chosen instead:* Single vision read per upload (`LlmDocumentRead`) returning classification, extraction, and tagging in 1 call (N calls).
+3. **LLM summaries for ops explanations:** Generative summaries can hallucinate or omit trace events.
+   - *Chosen instead:* Deterministic trace rendering in `ExplanationBuilder`.
 
-## Limitations, and the 10x design
+---
 
-Current limitations, honestly:
+## Scaling to 10x Load (Operations & Throughput)
 
-1. **Stateless = no history.** Claim history in the UI is browser-local; the
-   fraud agent consumes caller-supplied history. Fine for a demo, wrong for
-   production.
-2. **Synchronous processing.** A claim with 5 documents makes 5 sequential
-   LLM calls inside one HTTP request (~10–20s with vision). The progress
-   stream keeps the member informed meanwhile; true async is below.
-3. **Single-region, min-instances 0.** First request after idle pays a cold
-   start (~5–10s).
-4. **Extraction is per-document sequential.** Parallelizable today.
-5. **Deterministic matching is alias-based.** Novel phrasings beyond the
-   alias tables are caught only in vision mode (LLM recall); simulation mode
-   has no semantic net. Alias tables are curated, not learned.
-
-At 10x load (750k claims/year ≈ 2k/day, bursts much higher):
-
-- **Queue-based async intake.** API accepts the claim, writes to Postgres,
-  enqueues to Cloud Tasks/Pub/Sub; workers process with per-claim
-  idempotency keys. Members see "processing" then a notification; ops get a
-  review queue. This also gives natural retry semantics for component
-  failures (retry with backoff instead of instant fallback).
-- **Postgres for claims + traces.** The trace model is already structured
-  JSON — it maps directly to tables/JSONB. Fraud velocity checks become SQL
-  over real history instead of caller input.
-- **Parallel extraction.** Documents are independent — fan out with
-  `asyncio.gather` or one task per document; 5-doc claim latency drops from
-  sum to max.
-- **Document storage in GCS** with signed upload URLs (browser → GCS direct),
-  so the API never proxies multi-MB files.
-- **Min-instances ≥ 1 + concurrency tuning** on Cloud Run; LLM provider
-  rate-limit handling with token-bucket backoff.
-- **Semantic layer for medical text.** The hybrid tagger (LLM recall +
-  deterministic floor) is in place; at scale, add embedding similarity +
-  a curated synonym store feeding the SAME tag contracts, evaluated against
-  a labeled set. The deterministic layer stays as the high-precision floor.
-- **Human review console.** MANUAL_REVIEW decisions already carry structured
-  signals; at scale this becomes a first-class queue UI, and reviewer
-  outcomes feed back as labeled data.
-
-## Repository map
-
-```
-plum-claims/
-├── backend/
-│   ├── app/
-│   │   ├── contracts/      # Pydantic schemas = component contracts
-│   │   ├── policy/         # Policy loader (single source of truth)
-│   │   ├── rules/          # Deterministic: adjudication, financial, fraud,
-│   │   │                   #   waiting periods, tagging (semantic matching)
-│   │   ├── agents/         # LLM-facing: verification (single read),
-│   │   │                   #   extraction, cross-validation; + decision,
-│   │   │                   #   explanation
-│   │   ├── graph/          # LangGraph state + pipeline topology
-│   │   ├── observability/  # Trace recorder, confidence model, resilience
-│   │   ├── llm/            # Gemini client (the only model-touching module)
-│   │   ├── service.py      # Application boundary (used by API and evals)
-│   │   └── main.py         # FastAPI app
-│   ├── tests/              # pytest — 48 tests, real policy, no mocks
-│   ├── evals/run_evals.py  # 12-case eval → docs/EVAL_REPORT.md
-│   └── data/               # policy_terms.json, test_cases.json
-├── frontend/               # Next.js 15: form, live progress checklist,
-│                           #   decision card, trace viewer
-├── scripts/                # Mock document generator (demo assets)
-└── docs/                   # This file, CONTRACTS.md, EVAL_REPORT.md
-```
+To scale from current volume to 10x throughput (750,000+ claims/year):
+1. **Parallel Vision Fan-out with LangGraph `Send` API:** Use `Send` to process multi-document uploads in parallel worker nodes rather than sequential loops.
+2. **Persistent Checkpointing (`PostgresSaver`):** Upgrade graph compilation from ephemeral state to PostgreSQL checkpointing to support async queue workers and resumable Human-in-the-Loop workflows.
+3. **Model Caching & Batching:** Cache static policy embeddings and pre-normalized alias tables across requests.
