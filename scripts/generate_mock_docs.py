@@ -47,7 +47,7 @@ def make_prescription(path: Path) -> None:
     d.text((MARGIN, y), "Diagnosis: Viral Fever", font=f_body, fill="black"); y += 60
     d.text((MARGIN, y), "Rx:", font=f_body, fill="black"); y += 34
     d.text((MARGIN, y), "1. Tab Paracetamol 650mg - 1-1-1 x 5 days", font=f_body, fill="black"); y += 34
-    d.text((MARGIN, y), "2. Tab Vitamin C 500mg - 0-0-1 x 7 days", font=f_body, fill="black"); y += 60
+    d.text((MARGIN, y), "2. Tab Pantoprazole 40mg - 1-0-0 x 5 days", font=f_body, fill="black"); y += 60
     d.text((MARGIN, y), "Investigations: CBC, Dengue NS1", font=f_body, fill="black"); y += 34
     d.text((MARGIN, y), "Follow-up: After 5 days if no improvement", font=f_body, fill="black")
     d.text((W - MARGIN - 260, H - 160), "[Signature]", font=f_small, fill="gray")

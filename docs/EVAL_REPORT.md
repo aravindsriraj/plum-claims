@@ -1,6 +1,6 @@
 # Eval Report — 12 Test Cases
 
-Generated: 2026-07-28T16:13:43  
+Generated: 2026-07-28T16:23:37  
 Result: **12/12 passed** (deterministic run, no LLM calls — documents use provided-content/metadata modes)
 
 | Case | Name | Expected | Actual | Result |
@@ -32,7 +32,7 @@ Result: **12/12 passed** (deterministic run, no LLM calls — documents use prov
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-8E8C6DFC: DOCUMENT_REJECTED.
+Claim CLM-73081C3B: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'dr_sharma_prescription.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.
@@ -60,7 +60,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-495BC557: DOCUMENT_REJECTED.
+Claim CLM-02245D4C: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [UNREADABLE_DOCUMENT] We couldn't read your pharmacy bill ('blurry_bill.jpg') — the image is too blurry or damaged. Please re-upload a clear photo of that same document. Your claim has NOT been rejected; it will continue once we can read this document.
@@ -86,7 +86,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-629B8869: DOCUMENT_REJECTED.
+Claim CLM-161C500A: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [PATIENT_MISMATCH] Your documents appear to belong to different people: 'prescription_rajesh.jpg' belongs to Rajesh Kumar; 'bill_arjun.jpg' belongs to Arjun Mehta. Please upload documents for Rajesh Kumar only.
@@ -111,7 +111,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-5A78E90D: DECIDED.
+Claim CLM-3AFC21D6: DECIDED.
 
 Decision: APPROVED — approved ₹1,350 of ₹1,500 (confidence 0.98).
   All checks passed. Approved ₹1,350 of ₹1,500.
@@ -158,7 +158,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-DCB1A244: DECIDED.
+Claim CLM-E0837DD0: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹3,000 (confidence 0.98).
   diabetes: 90-day waiting period not served. Eligible from 2024-11-30.
@@ -198,7 +198,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-846876F0: DECIDED.
+Claim CLM-C4B4FDF0: DECIDED.
 
 Decision: PARTIAL — approved ₹8,000 of ₹12,000 (confidence 0.98).
   Approved ₹8,000 of ₹12,000.
@@ -244,7 +244,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-A2005F41: DECIDED.
+Claim CLM-822DC6FA: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹15,000 (confidence 0.98).
   'MRI Lumbar Spine' (MRI, ₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
@@ -289,7 +289,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-BD60434A: DECIDED.
+Claim CLM-56A7DD41: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹7,500 (confidence 0.98).
   Claimed amount ₹7,500 exceeds the per-claim limit of ₹5,000.
@@ -333,7 +333,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-577D321A: DECIDED.
+Claim CLM-5EADF0D7: DECIDED.
 
 Decision: MANUAL_REVIEW — approved ₹0 of ₹4,800 (confidence 0.98).
   Routed to manual review due to fraud/risk signals:
@@ -382,7 +382,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-1275F6F8: DECIDED.
+Claim CLM-FDF56C9A: DECIDED.
 
 Decision: APPROVED — approved ₹3,240 of ₹4,500 (confidence 0.98).
   All checks passed. Approved ₹3,240 of ₹4,500.
@@ -433,7 +433,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-5FD1D30F: DECIDED.
+Claim CLM-229F0124: DECIDED.
 
 Decision: APPROVED — approved ₹4,000 of ₹4,000 (confidence 0.73).
   All checks passed. Approved ₹4,000 of ₹4,000.
@@ -476,7 +476,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-CB3A73ED: DECIDED.
+Claim CLM-EE466C14: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹8,000 (confidence 0.98).
   Treatment relates to 'Morbid Obesity — BMI 37', which falls under the policy exclusion 'Obesity and weight loss programs'. Excluded conditions are never payable under this policy.
