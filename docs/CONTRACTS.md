@@ -254,3 +254,13 @@ rejection ends the stream after `verify_documents` + the result event.
 `PolicyTag{entry, matched_text, via}` — `via ∈ deterministic | llm | both`.
 `ExtractedDocument.tags` is `None` only when a document was built outside
 the pipeline (adjudication then tags it deterministically on the spot).
+
+---
+
+## 12. LangSmith Observability (app/observability/langsmith.py)
+
+| | |
+|---|---|
+| **Function** | `configure_langsmith()` |
+| **Behavior** | Exports `LANGSMITH_TRACING=true`, `LANGCHAIN_TRACING_V2=true`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT=plum-claims`, and `LANGSMITH_API_KEY` to the process environment. Decorates top-level service execution via `@traceable(name="ProcessClaim", run_type="chain")`. |
+| **Side Effects** | All LangGraph node state transitions, tool calls, and Gemini 3.6 Flash LLM calls generate hierarchical spans in real-time under the `plum-claims` LangSmith project dashboard. |
