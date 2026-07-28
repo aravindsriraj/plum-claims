@@ -21,8 +21,11 @@ from app.contracts.inputs import ClaimInput
 from app.contracts.responses import ClaimResponse, ProcessingMeta
 from app.graph.pipeline import build_graph
 from app.llm.client import LlmClient
+from app.observability.langsmith import configure_langsmith, traceable
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
+
+configure_langsmith()
 
 # Pipeline node -> member-facing stage label. Order is the graph's order.
 STAGES: list[tuple[str, str]] = [
@@ -61,6 +64,7 @@ class ClaimService:
             "member_name": member.name if member else claim.member_id,
         }
 
+    @traceable(name="ProcessClaim", run_type="chain")
     def process(self, claim: ClaimInput) -> ClaimResponse:
         started = time.perf_counter()
         trace = TraceRecorder()

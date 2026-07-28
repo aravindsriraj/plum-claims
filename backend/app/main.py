@@ -21,8 +21,11 @@ from fastapi.responses import StreamingResponse
 from app.contracts.inputs import ClaimInput
 from app.contracts.responses import ClaimResponse
 from app.llm.client import LlmClient
+from app.observability.langsmith import configure_langsmith
 from app.policy.loader import load_policy
 from app.service import ClaimService
+
+configure_langsmith()
 
 
 @asynccontextmanager
