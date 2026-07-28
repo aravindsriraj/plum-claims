@@ -93,7 +93,25 @@ Checks (warnings only, never hard-stops): patient name vs roster name (with LLM
 second opinion via `LlmNameVerdict` when names differ, clearing false
 mismatches like "R. Kumar" vs "Rajesh Kumar"); document dates within 3 days of
 treatment date; claimed amount vs sum of bill totals; provider form vs docs;
-prescription presence when category requires one.
+prescription presence when category requires one; LLM medical necessity & clinical
+consistency evaluation (`LlmClinicalVerdict`).
+
+---
+
+## 3b. ClinicalReasoningAgent (ReAct Sub-Agent)
+
+**File:** `app/agents/clinical_agent.py` · **Resilient:** yes (fallback → skip + warning)
+
+| | |
+|---|---|
+| **Input** | `docs: list[ExtractedDocument]`; `policy: Policy`; `llm: LlmClient \| None` |
+| **Output** | `ClinicalAssessment{exclusions_found[], waiting_periods_found[], pre_auth_required[], summary}` |
+| **Raises** | nothing for data problems |
+
+Behavior contract:
+Dynamically invokes policy tools (`lookup_policy_exclusion`,
+`check_condition_waiting_period`, `verify_high_value_test_preauth`) on extracted
+diagnoses, treatments, and line items. Emits tool finding evidence into the trace and updates graph state.
 
 ---
 

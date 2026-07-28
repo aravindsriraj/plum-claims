@@ -19,7 +19,7 @@ into two kinds:
 
 | Kind of work | Examples | Owner |
 |---|---|---|
-| **Perception** (fuzzy, unstructured) | Is this photo a prescription or a bill? What does this Rx say? Does "high sugar" mean diabetes? Is "Magnetic Resonance Imaging" an MRI? Is "OPD visit" a consultation fee? Are "R. Kumar" and "Rajesh Kumar" the same person? Member-facing prose polishing. | LLM agents (Gemini vision) |
+| **Perception** (fuzzy, unstructured) | Is this photo a prescription or a bill? What does this Rx say? Does "high sugar" mean diabetes? Is "Magnetic Resonance Imaging" an MRI? Is "OPD visit" a consultation fee? Are "R. Kumar" and "Rajesh Kumar" the same person? Member-facing prose polishing. | LLM agents (Gemini 3.6 Flash) |
 | **Judgment** (exact, accountable) | Waiting-period date math, co-pay calculation, sub-limits, what to DO with an exclusion or high-value test, per-claim limits, final decision precedence | Deterministic Python rules engine |
 
 Anything that touches money, dates, or policy logic is **pure code driven by
@@ -81,30 +81,29 @@ judges document sufficiency, extraction still owns the structured record.
                          ┌──────────────────────────────────────────────┐
  Browser (Next.js UI)    │              Backend (FastAPI)               │
  ┌───────────────┐       │                                              │
- │ Claim form    │ POST  │  LangGraph pipeline (7 components):          │
+ │ Claim form    │ POST  │  LangGraph pipeline (7 nodes):               │
  │ File upload   ├──────▶│                                              │
  │ Decision card │ /api  │  1 DocumentVerificationAgent ─┐ issues?      │
  │ Trace viewer  │◀──────┤  2 ExtractionAgent            ▼              │
  └───────────────┘       │  3 CrossValidationAgent   EARLY STOP         │
-                         │  4 AdjudicationEngine  (deterministic)       │
-                         │  5 FraudAgent          (deterministic)       │
-                         │  6 DecisionSynthesizer (deterministic)       │
-                         │  7 ExplanationBuilder  (deterministic)       │
+                         │  4 ClinicalReasoningAgent (ReAct tools)      │
+                         │  5 AdjudicationEngine  (deterministic)       │
+                         │  6 FraudAgent          (deterministic)       │
+                         │  7 DecisionSynthesizer (deterministic)       │
                          └──────────────┬───────────────────────────────┘
-                                        │ vision calls only
+                                        │ vision & reasoning calls
                                  ┌──────▼──────┐
-                                 │ Gemini 2.5  │
+                                 │ Gemini 3.6  │
                                  │ Flash       │
                                  └─────────────┘
 ```
 
 Two deployable units (Cloud Run services), one repo:
 
-- **`backend/`** — Python 3.12, FastAPI + LangGraph + Pydantic v2. Stateless:
-  a claim goes in, a decision + full trace comes out in the same response.
+- **`backend/`** — Python 3.12, FastAPI + LangGraph + Pydantic v2 + LangSmith tracing.
+  Stateless: a claim goes in, a decision + full trace comes out in the same response.
 - **`frontend/`** — Next.js 15 (TypeScript). Server-side rewrite proxies
-  `/api/*` to the backend, so the browser never sees the backend URL and no
-  CORS is needed in production.
+  `/api/*` to the backend, rendering real-time 7-stage streaming progress via NDJSON.
 
 ## The pipeline (multi-agent, LangGraph)
 
@@ -113,7 +112,9 @@ verify_documents ──document issues?──▶ END (status: DOCUMENT_REJECTED)
       │ none
 extract_documents            ← per-document resilience isolation
       │
-cross_validate               ← designated fault-injection point (TC011)
+cross_validate               ← designated fault-injection point (TC011) + name/clinical checks
+      │
+clinical_reasoning           ← ReAct sub-agent invoking policy tools (exclusion, waiting, pre-auth)
       │
 adjudicate                   ← 10 ordered rule checks, all from policy JSON
       │
@@ -124,7 +125,7 @@ synthesize_decision ────────▶ END (status: DECIDED, decision +
 
 ### Component responsibilities
 
-1. **DocumentVerificationAgent** — Reads every upload ONCE via Gemini vision
+1. **DocumentVerificationAgent** — Reads every upload ONCE via Gemini 3.6 Flash vision
    (classification + extraction + policy tags in a single structured output —
    see "One vision read per document"), or simulation metadata in eval mode.
    Validates the set against `document_requirements` in the policy.
@@ -141,30 +142,37 @@ synthesize_decision ────────▶ END (status: DECIDED, decision +
    same Pydantic schema, so downstream code can't tell them apart.
    Illegible fields are flagged, never guessed.
 
-3. **CrossValidationAgent** — Consistency *across* documents: patient identity,
-   document dates vs treatment date, claimed amount vs bill totals. Warnings
-   only; reduces confidence, never hard-stops. This is the designated fault-
+3. **CrossValidationAgent** — Consistency *across* documents: patient identity (with
+   LLM name reconciliation via `LlmNameVerdict`), document dates vs treatment date,
+   claimed amount vs bill totals, and LLM medical necessity evaluation (`LlmClinicalVerdict`).
+   Warnings only; reduces confidence, never hard-stops. This is the designated fault-
    injection point: `simulate_component_failure` forces it to raise.
 
-4. **AdjudicationEngine** — Not an LLM agent. Ten ordered rule checks (member
+4. **ClinicalReasoningAgent (ReAct Sub-Agent)** — An autonomous ReAct node that evaluates
+   clinical text and billing line items by dynamically invoking domain policy tools
+   (`lookup_policy_exclusion`, `check_condition_waiting_period`, `verify_high_value_test_preauth`).
+   Appends tool execution evidence directly to state and the trace.
+
+5. **AdjudicationEngine** — Not an LLM agent. Ten ordered rule checks (member
    validity → submission deadline → minimum amount → initial waiting period →
    exclusions → specific waiting periods → pre-auth → per-claim limit →
    line-item adjudication → financial computation). Hard-fail checks
    short-circuit and record what was skipped. Every check appends a trace event.
 
-5. **FraudAgent** — Deterministic velocity/value signals from
+6. **FraudAgent** — Deterministic velocity/value signals from
    `fraud_thresholds`: same-day claim velocity, monthly velocity, high-value
    claims. Produces a fraud score and a manual-review flag with the specific
    signals enumerated (TC009).
 
-6. **DecisionSynthesizer** — Combines adjudication + fraud + computed
+7. **DecisionSynthesizer** — Combines adjudication + fraud + computed
    confidence into the final decision with fixed precedence:
    hard-fail → REJECTED; fraud flag → MANUAL_REVIEW; some line items
    rejected → PARTIAL; else APPROVED.
 
-7. **ExplanationBuilder** — Renders the trace into an ops narrative by
-   deterministic templating — deliberately *not* an LLM summary, because an
-   LLM paraphrase could drift from what actually happened.
+8. **MemberMessagePolisher & ExplanationBuilder** — `MemberMessagePolisher` rewrites
+   status messages in warm prose, validated by a regex check ensuring all figures survive
+   verbatim. `ExplanationBuilder` renders the trace into an ops narrative by deterministic
+   templating.
 
 ## Observability: the trace is a first-class artifact
 

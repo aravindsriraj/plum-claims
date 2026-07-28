@@ -5,8 +5,13 @@ verifies them, extracts structured data with a vision model, and decides
 APPROVED / PARTIAL / REJECTED / MANUAL_REVIEW against a JSON-defined policy —
 with a complete audit trace for every decision.
 
-**Design principle: LLMs for perception, code for judgment.** Gemini reads
-documents; deterministic Python applies policy. See `docs/ARCHITECTURE.md`.
+**Design principle: LLMs for perception, code for judgment.** Gemini 3.6 Flash
+reads documents & invokes policy tools via a ReAct sub-agent; deterministic Python applies policy arithmetic. See `docs/ARCHITECTURE.md`.
+
+## Observability & Tracing
+
+Full LangSmith tracing is integrated across LangGraph nodes and LLM calls under project `plum-claims`:
+- **LangSmith Project:** `plum-claims` (https://smith.langchain.com)
 
 ## Live deployment (Cloud Run, asia-south1)
 
@@ -55,11 +60,11 @@ npm install && npm run build && npm run start   # http://localhost:3000
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests/        # 48 unit tests (rules, tagging, agents, API)
+.venv/bin/python -m pytest tests/        # 57 unit tests (rules, tagging, agents, API)
 .venv/bin/python -m evals.run_evals      # 12 assignment test cases -> docs/EVAL_REPORT.md
 ```
 
-Current status: **48/48 unit tests, 12/12 eval cases** (see
+Current status: **57/57 unit tests, 12/12 eval cases** (see
 `docs/EVAL_REPORT.md`, regenerated on every run).
 
 ## Deploy (Cloud Run)
