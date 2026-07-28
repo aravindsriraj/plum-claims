@@ -32,6 +32,7 @@ STAGES: list[tuple[str, str]] = [
     ("verify_documents", "Verifying documents"),
     ("extract_documents", "Reading documents"),
     ("cross_validate", "Cross-checking details"),
+    ("clinical_reasoning", "Clinical policy agent"),
     ("adjudicate", "Applying policy rules"),
     ("fraud_check", "Fraud screening"),
     ("synthesize_decision", "Finalizing decision"),

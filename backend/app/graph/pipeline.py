@@ -24,6 +24,7 @@ validation node to raise, exercising exactly this path (TC011).
 
 from langgraph.graph import END, StateGraph
 
+from app.agents.clinical_agent import run_clinical_reasoning_agent
 from app.agents.cross_validation import cross_validate
 from app.agents.decision import synthesize
 from app.agents.document_verification import verify_documents
@@ -124,6 +125,24 @@ def cross_validate_node(state: ClaimState) -> dict:
     return {"cross_validation_warnings": warnings}
 
 
+def clinical_reasoning_node(state: ClaimState) -> dict:
+    """Agent 3b: Clinical Reasoning ReAct Sub-Agent invoking domain tools."""
+    trace = state["trace"]
+    assessment = run_resilient(
+        "ClinicalReasoningAgent",
+        lambda: run_clinical_reasoning_agent(
+            docs=state["extracted_documents"],
+            policy=state["policy"],
+            trace=trace,
+            llm=state.get("llm"),
+        ),
+        lambda: None,
+        trace,
+        fallback_description="clinical reasoning agent skipped; relying on deterministic adjudication",
+    )
+    return {"clinical_assessment": assessment}
+
+
 def adjudicate_node(state: ClaimState) -> dict:
     """Component 4: deterministic policy adjudication. No LLM involved."""
     result = adjudicate(state["claim"], state["policy"], state["extracted_documents"], state["trace"])
@@ -188,6 +207,7 @@ def build_graph() -> StateGraph:
     graph.add_node("verify_documents", verify_documents_node)
     graph.add_node("extract_documents", extract_documents_node)
     graph.add_node("cross_validate", cross_validate_node)
+    graph.add_node("clinical_reasoning", clinical_reasoning_node)
     graph.add_node("adjudicate", adjudicate_node)
     graph.add_node("fraud_check", fraud_check_node)
     graph.add_node("synthesize_decision", synthesize_decision_node)
@@ -199,7 +219,8 @@ def build_graph() -> StateGraph:
         {"stop": END, "continue": "extract_documents"},
     )
     graph.add_edge("extract_documents", "cross_validate")
-    graph.add_edge("cross_validate", "adjudicate")
+    graph.add_edge("cross_validate", "clinical_reasoning")
+    graph.add_edge("clinical_reasoning", "adjudicate")
     graph.add_edge("adjudicate", "fraud_check")
     graph.add_edge("fraud_check", "synthesize_decision")
     graph.add_edge("synthesize_decision", END)

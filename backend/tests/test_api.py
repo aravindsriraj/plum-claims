@@ -123,7 +123,7 @@ def test_stream_emits_stages_in_order_then_identical_result(client):
     done_order = [s["stage"] for s in stages if s["status"] == "done"]
     assert done_order == [
         "verify_documents", "extract_documents", "cross_validate",
-        "adjudicate", "fraud_check", "synthesize_decision",
+        "clinical_reasoning", "adjudicate", "fraud_check", "synthesize_decision",
     ]
     assert stages[0]["status"] == "running" and stages[0]["stage"] == "verify_documents"
 

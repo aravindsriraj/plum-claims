@@ -26,6 +26,7 @@ class ClaimState(TypedDict, total=False):
     llm_reads: dict[str, Any]  # file_id -> LlmDocumentRead (vision mode only)
     extracted_documents: list[ExtractedDocument]
     cross_validation_warnings: list[str]
+    clinical_assessment: Any
     adjudication: AdjudicationResult
     fraud: FraudAssessment
     decision: ClaimDecision

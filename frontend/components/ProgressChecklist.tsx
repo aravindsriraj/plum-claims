@@ -5,6 +5,7 @@ const STAGE_ORDER: { id: string; label: string }[] = [
   { id: "verify_documents", label: "Verifying documents" },
   { id: "extract_documents", label: "Reading documents" },
   { id: "cross_validate", label: "Cross-checking details" },
+  { id: "clinical_reasoning", label: "Clinical policy agent" },
   { id: "adjudicate", label: "Applying policy rules" },
   { id: "fraud_check", label: "Fraud screening" },
   { id: "synthesize_decision", label: "Finalizing decision" },

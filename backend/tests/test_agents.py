@@ -471,11 +471,30 @@ class TestResilience:
         assert len(trace.failures) == 1
         assert trace.failures[0].component == "SomeAgent"
         assert "TimeoutError" in trace.failures[0].error
-        # The failure is also visible as a trace event.
         assert any("SomeAgent" in e.summary or e.component == "SomeAgent" for e in trace.events)
 
     def test_success_path_untouched(self):
         trace = TraceRecorder()
-        result = run_resilient("OkAgent", lambda: 42, lambda: -1, trace)
-        assert result == 42
-        assert trace.failures == []
+        result = run_resilient("SomeAgent", lambda: [1, 2, 3], lambda: [], trace)
+        assert result == [1, 2, 3]
+        assert len(trace.failures) == 0
+
+
+# ----------------------------------------------------------- ReAct Investigation
+class TestReActInvestigation:
+    def test_investigation_tools_build_correctly(self):
+        from app.agents.investigation import build_investigation_tools
+        claim = ClaimInput(
+            member_id="EMP001",
+            policy_id="PLUM_GHI_2024",
+            claim_category=ClaimCategory.CONSULTATION,
+            treatment_date=date(2024, 11, 1),
+            claimed_amount=1500,
+            documents=[doc("F1")],
+        )
+        tools = build_investigation_tools(POLICY, claim)
+        assert len(tools) == 3
+        tool_names = {t.name for t in tools}
+        assert "lookup_policy_rules" in tool_names
+        assert "check_member_history" in tool_names
+        assert "verify_provider_network" in tool_names
