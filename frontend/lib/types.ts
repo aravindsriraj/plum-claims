@@ -88,3 +88,22 @@ export interface ClaimPayload {
   simulate_component_failure?: boolean;
   documents: ClaimDocumentPayload[];
 }
+
+// --- Progress streaming (POST /claims/stream, NDJSON) ---
+
+export type StageStatus = "pending" | "running" | "done";
+
+export interface StageEvent {
+  type: "stage";
+  stage: string;
+  label: string;
+  status: "running" | "done";
+  summary?: string;
+}
+
+export interface ResultEvent {
+  type: "result";
+  response: ClaimResponse;
+}
+
+export type StreamEvent = StageEvent | ResultEvent;

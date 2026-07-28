@@ -109,3 +109,27 @@ td.num, th.num { text-align: right; }
 
 details { margin-top: 8px; }
 summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--accent); }
+
+/* --- Live progress checklist --- */
+.progress-card { border-left: 3px solid var(--accent); }
+.stage-list { list-style: none; margin: 0; padding: 0; }
+.stage { display: flex; gap: 12px; padding: 8px 0; align-items: flex-start; }
+.stage-icon {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; border: 1.5px solid var(--border);
+  color: var(--muted); background: #fff;
+}
+.stage-label { font-size: 14px; font-weight: 600; }
+.stage-summary { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.stage-pending { opacity: 0.45; }
+.stage-running .stage-icon {
+  border-color: var(--accent); color: var(--accent);
+  animation: stage-pulse 1.1s ease-in-out infinite;
+}
+.stage-running .stage-label { color: var(--accent); }
+.stage-done .stage-icon { border-color: var(--pass); background: var(--pass); color: #fff; }
+@keyframes stage-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(67, 56, 202, 0.25); }
+  50% { box-shadow: 0 0 0 6px rgba(67, 56, 202, 0); }
+}

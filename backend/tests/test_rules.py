@@ -97,6 +97,83 @@ class TestExclusions:
         assert not tag_deterministic(POLICY, "Viral Fever").exclusions
 
 
+# ------------------------------------------------------------------ tagging
+class TestTagMerging:
+    """Hybrid semantics: union, provenance on every tag, disagreements flagged."""
+
+    def test_llm_recall_merged_with_deterministic_floor(self):
+        from app.contracts.documents import DocumentTags, PolicyTag
+        from app.rules.tagging import merge_tags
+
+        det = tag_deterministic(POLICY, "Type 2 Diabetes Mellitus")
+        llm = DocumentTags(
+            conditions=["diabetes", "hypertension"],  # hypertension = LLM-only recall
+            exclusions=[],
+        )
+        merged = merge_tags(llm, det, file_id="F1")
+        assert set(merged.tags.conditions) == {"diabetes", "hypertension"}
+        # The LLM-only condition is surfaced as an alias-gap warning.
+        assert any("hypertension" in w for w in merged.warnings)
+
+    def test_exclusion_found_by_both_marked_both(self):
+        from app.contracts.documents import DocumentTags, PolicyTag
+        from app.rules.tagging import merge_tags
+
+        det = tag_deterministic(POLICY, "Morbid Obesity — BMI 37")
+        entry = det.exclusions[0].entry
+        llm = DocumentTags(exclusions=[PolicyTag(entry=entry, matched_text="BMI 37", via="llm")])
+        merged = merge_tags(llm, det)
+        merged_tag = next(t for t in merged.tags.exclusions if t.entry == entry)
+        assert merged_tag.via == "both"
+        assert not merged.warnings  # agreement is not a disagreement
+
+    def test_no_llm_tags_returns_deterministic_verbatim(self):
+        from app.rules.tagging import merge_tags
+
+        det = tag_deterministic(POLICY, "Type 2 Diabetes Mellitus")
+        merged = merge_tags(None, det)
+        assert merged.tags is det
+        assert not merged.warnings
+
+
+class TestLlmTagValidation:
+    """LLM tags are whitelist-checked against the policy vocabulary."""
+
+    def test_hallucinated_condition_dropped_and_flagged(self):
+        from app.contracts.documents import DocumentTags
+        from app.rules.tagging import validate_llm_tags
+
+        raw = DocumentTags(conditions=["diabetes", "alien_fever"], exclusions=[])
+        clean, warnings = validate_llm_tags(raw, POLICY)
+        assert clean.conditions == ["diabetes"]
+        assert any("alien_fever" in w for w in warnings)
+
+    def test_hallucinated_exclusion_dropped_and_flagged(self):
+        from app.contracts.documents import DocumentTags, PolicyTag
+        from app.rules.tagging import validate_llm_tags
+
+        raw = DocumentTags(exclusions=[
+            PolicyTag(entry="Substance abuse treatment", matched_text="rehab", via="llm"),
+            PolicyTag(entry="Invented exclusion", matched_text="x", via="llm"),
+        ])
+        clean, warnings = validate_llm_tags(raw, POLICY)
+        assert [t.entry for t in clean.exclusions] == ["Substance abuse treatment"]
+        assert any("Invented exclusion" in w for w in warnings)
+
+    def test_aliases_come_from_policy_file_not_code(self):
+        """The policy JSON is the vocabulary's single source of truth."""
+        from app.policy.loader import Policy
+
+        custom = Policy(raw={
+            **POLICY.raw,
+            "matching_aliases": {"conditions": {"diabetes": ["sugar problem"]}, "exclusions": {}},
+        })
+        tags = tag_deterministic(custom, "Patient has a sugar problem")
+        assert tags.conditions == ["diabetes"]
+        # And the stock alias no longer fires under the custom vocabulary.
+        assert not tag_deterministic(custom, "Type 2 Diabetes Mellitus").conditions
+
+
 # ------------------------------------------------------------------ waiting
 class TestWaitingPeriods:
     def test_initial_waiting_period_math(self):
@@ -318,3 +395,19 @@ class TestAdjudication:
         result = run(claim, [make_doc(total=1500)])
         assert result.hard_failed
         assert "MEMBER_NOT_FOUND" in result.rejection_reasons
+
+    def test_tags_drive_adjudication_without_clinical_text(self):
+        """A document tagged upstream (no raw diagnosis) still triggers the
+        diabetes waiting period — the engine consumes tags, not text."""
+        from app.contracts.documents import DocumentTags
+
+        claim = make_claim(
+            member_id="EMP005",
+            treatment_date=date(2024, 10, 15),
+            claimed_amount=3000,
+        )
+        doc = make_doc(total=3000)  # no diagnosis text at all
+        doc.tags = DocumentTags(conditions=["diabetes"], exclusions=[])
+        result = run(claim, [doc])
+        assert result.hard_failed
+        assert "WAITING_PERIOD" in result.rejection_reasons

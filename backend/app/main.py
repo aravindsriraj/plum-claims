@@ -1,18 +1,22 @@
 """FastAPI application: the HTTP boundary.
 
 Endpoints:
-  POST /claims  — submit a claim, get back decision + full trace
-  GET  /health  — liveness/readiness for Cloud Run
+  POST /claims         — submit a claim, get back decision + full trace
+  POST /claims/stream  — same, but streams per-stage progress as NDJSON,
+                         ending with the identical response payload
+  GET  /health         — liveness/readiness for Cloud Run
 
 The app is intentionally thin: all behavior lives in the pipeline, so the
 eval runner and the API exercise identical code paths.
 """
 
+import json
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from app.contracts.inputs import ClaimInput
 from app.contracts.responses import ClaimResponse
@@ -49,6 +53,24 @@ def submit_claim(claim: ClaimInput) -> ClaimResponse:
     """Process one claim end-to-end. Sync handler: the pipeline is CPU/IO
     bound on the LLM client, and FastAPI runs sync handlers in a threadpool."""
     return app.state.claim_service.process(claim)
+
+
+@app.post("/claims/stream")
+def submit_claim_stream(claim: ClaimInput) -> StreamingResponse:
+    """Process one claim, streaming progress as newline-delimited JSON:
+    one {"type":"stage",...} event per pipeline node, then a final
+    {"type":"result","response":...} event with the same payload as /claims.
+    X-Accel-Buffering: no — keep proxies from buffering the stream."""
+
+    def lines():
+        for event in app.state.claim_service.process_stream(claim):
+            yield json.dumps(event) + "\n"
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/health")

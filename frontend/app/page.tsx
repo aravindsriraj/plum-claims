@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { fileToBase64, submitClaim } from "@/lib/api";
+import { fileToBase64, submitClaimStream } from "@/lib/api";
 import type { ClaimPayload, ClaimResponse } from "@/lib/types";
 import DecisionCard from "@/components/DecisionCard";
 import DocumentIssues from "@/components/DocumentIssues";
+import ProgressChecklist, { stagesFromEvent, type StageState } from "@/components/ProgressChecklist";
 import TraceViewer from "@/components/TraceViewer";
 
 const CATEGORIES = [
@@ -34,6 +35,7 @@ export default function Home() {
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [stages, setStages] = useState<Record<string, StageState>>({});
   const [response, setResponse] = useState<ClaimResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +44,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResponse(null);
+    setStages({});
     try {
       const documents = await Promise.all(
         files.map(async (f, i) => ({
@@ -62,7 +65,11 @@ export default function Home() {
         simulate_component_failure: simulateFailure,
         documents,
       };
-      setResponse(await submitClaim(payload));
+      setResponse(
+        await submitClaimStream(payload, (event) =>
+          setStages((prev) => stagesFromEvent(prev, event))
+        )
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed");
     } finally {
@@ -138,6 +145,8 @@ export default function Home() {
       </form>
 
       {error && <div className="banner error">{error}</div>}
+
+      {loading && <ProgressChecklist stages={stages} />}
 
       {response && (
         <>

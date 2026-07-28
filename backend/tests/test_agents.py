@@ -148,6 +148,57 @@ class TestExtraction:
         assert extracted.patient_name == "X"
         assert extracted.overall_confidence == 0.5
 
+    def test_vision_read_shapes_document_and_merges_tags(self):
+        """The single read flows through: fields land, LLM tags are validated
+        and union-merged with the deterministic matcher."""
+        import base64
+
+        from app.agents.document_verification import LlmDocumentRead, LlmExclusionTag
+        from app.contracts.documents import ClassifiedDocument
+        from app.contracts.enums import ExtractionMethod
+
+        documents = [
+            doc(
+                "F1",
+                actual_type=None,
+                file_content_base64=base64.b64encode(b"fake-image").decode(),
+                mime_type="image/jpeg",
+            )
+        ]
+        # The classified shell as verification would have produced it.
+        classified = [
+            ClassifiedDocument(
+                file_id="F1",
+                detected_type=DocumentType.PRESCRIPTION,
+                detection_confidence=0.95,
+                quality=DocumentQuality.GOOD,
+                patient_name_on_doc="Rajesh Kumar",
+                method=ExtractionMethod.VISION_LLM,
+            )
+        ]
+        read = LlmDocumentRead(
+            doc_type=DocumentType.PRESCRIPTION,
+            quality=DocumentQuality.GOOD,
+            classification_confidence=0.95,
+            patient_name="Rajesh Kumar",
+            diagnosis="Type 2 Diabetes Mellitus with high sugar",
+            overall_confidence=0.9,
+            matched_conditions=["diabetes", "alien_fever"],  # one hallucinated
+            matched_exclusions=[LlmExclusionTag(entry="Invented exclusion", evidence="x")],
+        )
+        trace = TraceRecorder()
+        [extracted] = extract_documents(
+            documents, classified, trace, POLICY, llm_reads={"F1": read}
+        )
+        assert extracted.patient_name == "Rajesh Kumar"
+        assert extracted.diagnosis.startswith("Type 2")
+        # Hallucinated tags dropped; real tags merged (LLM + deterministic agree).
+        assert extracted.tags.conditions == ["diabetes"]
+        assert extracted.tags.exclusions == []
+        warnings = [e.summary for e in trace.events if e.status == "WARN"]
+        assert any("alien_fever" in w for w in warnings)
+        assert any("Invented exclusion" in w for w in warnings)
+
 
 # ------------------------------------------------------------ cross-validation
 class TestCrossValidation:
