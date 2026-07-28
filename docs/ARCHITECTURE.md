@@ -19,8 +19,8 @@ into two kinds:
 
 | Kind of work | Examples | Owner |
 |---|---|---|
-| **Perception** (fuzzy, unstructured) | Is this photo a prescription or a bill? What does this handwritten Rx say? Is this scan readable? Does "high sugar" mean diabetes? Does this treatment fall under a policy exclusion? | LLM agents (Gemini vision) |
-| **Judgment** (exact, accountable) | Waiting-period date math, co-pay calculation, sub-limits, what to DO with an exclusion, per-claim limits, the final decision | Deterministic Python rules engine |
+| **Perception** (fuzzy, unstructured) | Is this photo a prescription or a bill? What does this Rx say? Does "high sugar" mean diabetes? Is "Magnetic Resonance Imaging" an MRI? Is "OPD visit" a consultation fee? Are "R. Kumar" and "Rajesh Kumar" the same person? Member-facing prose polishing. | LLM agents (Gemini vision) |
+| **Judgment** (exact, accountable) | Waiting-period date math, co-pay calculation, sub-limits, what to DO with an exclusion or high-value test, per-claim limits, final decision precedence | Deterministic Python rules engine |
 
 Anything that touches money, dates, or policy logic is **pure code driven by
 `policy_terms.json`** — never an LLM output, never hardcoded. This is why the

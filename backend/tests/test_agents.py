@@ -265,6 +265,94 @@ class TestCrossValidation:
         warnings = cross_validate(claim, "Rajesh Kumar", docs, POLICY, TraceRecorder())
         assert any("Provider mismatch" in w for w in warnings)
 
+    def test_llm_name_reconciliation_clears_mismatch_warning(self):
+        """When names mismatch ('R. Kumar' vs 'Rajesh Kumar'), an LLM second opinion
+        can confirm they refer to the same person and suppress the warning."""
+        from app.agents.cross_validation import LlmNameVerdict
+        from app.contracts.documents import ExtractedDocument
+        from app.contracts.enums import ExtractionMethod
+
+        class FakeLlm:
+            call_count = 1
+
+            def structured(self, schema, prompt, **kwargs):
+                return LlmNameVerdict(same_person=True, rationale="Initial abbreviation")
+
+        docs = [
+            ExtractedDocument(
+                file_id="F1",
+                doc_type=DocumentType.HOSPITAL_BILL,
+                method=ExtractionMethod.PROVIDED_CONTENT,
+                patient_name="R. Kumar",
+                total_amount=1500,
+            )
+        ]
+        trace = TraceRecorder()
+        warnings = cross_validate(
+            self.make_claim(), "Rajesh Kumar", docs, POLICY, trace, llm=FakeLlm()
+        )
+        assert not any("patient name" in w for w in warnings)
+        assert any("reconciled with member" in e.summary for e in trace.events)
+
+    def test_llm_name_reconciliation_keeps_warning_when_different_person(self):
+        """If the LLM concludes they are different people, the warning remains."""
+        from app.agents.cross_validation import LlmNameVerdict
+        from app.contracts.documents import ExtractedDocument
+        from app.contracts.enums import ExtractionMethod
+
+        class FakeLlm:
+            call_count = 1
+
+            def structured(self, schema, prompt, **kwargs):
+                return LlmNameVerdict(same_person=False, rationale="Different people")
+
+        docs = [
+            ExtractedDocument(
+                file_id="F1",
+                doc_type=DocumentType.HOSPITAL_BILL,
+                method=ExtractionMethod.PROVIDED_CONTENT,
+                patient_name="Arjun Mehta",
+                total_amount=1500,
+            )
+        ]
+        warnings = cross_validate(
+            self.make_claim(), "Rajesh Kumar", docs, POLICY, TraceRecorder(), llm=FakeLlm()
+        )
+        assert any("do not match" in w for w in warnings)
+
+
+# ------------------------------------------------------------------- member message
+class TestMemberMessagePolisher:
+    def test_preserved_figures_returns_polished_text(self):
+        from app.agents.member_message import LlmMemberMessage, polish_member_message
+
+        class FakeLlm:
+            def structured(self, schema, prompt, **kwargs):
+                return LlmMemberMessage(
+                    message="Great news! Your claim was approved. We will pay ₹1,350 out of ₹1,500."
+                )
+
+        template = "Your claim has been approved. ₹1,350 of ₹1,500 will be paid."
+        trace = TraceRecorder()
+        result = polish_member_message(template, FakeLlm(), trace)
+        assert "Great news!" in result
+        assert "₹1,350" in result and "₹1,500" in result
+
+    def test_dropped_figure_falls_back_to_template(self):
+        from app.agents.member_message import LlmMemberMessage, polish_member_message
+
+        class FakeLlm:
+            def structured(self, schema, prompt, **kwargs):
+                # Dropped the ₹1,350 figure!
+                return LlmMemberMessage(message="Your claim was approved for full payment.")
+
+        template = "Your claim has been approved. ₹1,350 of ₹1,500 will be paid."
+        trace = TraceRecorder()
+        result = polish_member_message(template, FakeLlm(), trace)
+        # Should fall back to template because ₹1,350 was missing
+        assert result == template
+        assert any("dropped or altered a figure" in e.summary for e in trace.events)
+
 
 # ------------------------------------------------------------------- decision
 class TestDecisionSynthesis:

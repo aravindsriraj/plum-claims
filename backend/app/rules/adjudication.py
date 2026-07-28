@@ -37,7 +37,7 @@ from app.rules.financial import (
     apply_sub_limit,
     is_network_hospital,
 )
-from app.rules.tagging import tag_deterministic
+from app.rules.tagging import is_consultation_fee, match_high_value_test, tag_deterministic
 from app.rules.textnorm import normalize
 from app.rules.waiting import (
     check_initial_waiting_period,
@@ -311,7 +311,7 @@ def adjudicate(
 
     # --- 7. Pre-authorization --------------------------------------------------
     pre_auth_needed, pre_auth_why = _pre_auth_requirement(
-        claim, rules, line_items, clinical
+        claim, rules, line_items, clinical, policy
     )
     if pre_auth_needed:
         if not add_check(
@@ -400,7 +400,7 @@ def adjudicate(
     # Step A: sub-limit. For consultation claims it caps only the
     # consultation-fee portion; for single-service categories it caps the
     # whole eligible amount.
-    sub_limit_base = _sub_limit_base(claim.claim_category, line_items, eligible)
+    sub_limit_base = _sub_limit_base(claim.claim_category, line_items, eligible, policy)
     remainder = eligible - sub_limit_base
     capped_base, sub_adj = apply_sub_limit(sub_limit_base, claim.claim_category.value, rules)
     eligible_after_cap = round(capped_base + remainder, 2)
@@ -434,11 +434,24 @@ def adjudicate(
     return result
 
 
+def _line_high_value_test(li: LineItem, policy: Policy, known_tests: list[str]) -> str | None:
+    """Which high-value test (if any) a line item bills for.
+
+    An LLM tag is accepted only if it names a test this policy actually lists
+    (never trusted blindly); untagged lines fall back to alias matching, so
+    'Magnetic Resonance Imaging (Brain)' is caught just like 'MRI Brain'.
+    """
+    if li.matched_high_value_test:
+        return li.matched_high_value_test if li.matched_high_value_test in known_tests else None
+    return match_high_value_test(policy, li.description)
+
+
 def _pre_auth_requirement(
     claim: ClaimInput,
     rules,
     line_items: list[LineItem],
     clinical: list[str],
+    policy: Policy,
 ) -> tuple[bool, str]:
     """Decide whether this claim needed pre-authorization, and why."""
     if rules.requires_pre_auth:
@@ -446,27 +459,22 @@ def _pre_auth_requirement(
 
     # High-value diagnostics: named test above the category threshold.
     threshold = rules.pre_auth_threshold
-    if rules.high_value_tests_requiring_pre_auth and threshold:
-        billed_high_value = [
-            li
-            for li in line_items
-            if any(
-                normalize(t) in normalize(li.description)
-                for t in rules.high_value_tests_requiring_pre_auth
-            )
-        ]
-        for li in billed_high_value:
-            if li.amount > threshold:
+    known_tests = rules.high_value_tests_requiring_pre_auth
+    if known_tests and threshold:
+        for li in line_items:
+            test = _line_high_value_test(li, policy, known_tests)
+            if test and li.amount > threshold:
                 return True, (
-                    f"'{li.description}' (₹{li.amount:,.0f}) is a high-value test "
+                    f"'{li.description}' ({test}, ₹{li.amount:,.0f}) is a high-value test "
                     f"requiring pre-authorization above ₹{threshold:,.0f}."
                 )
         # Test ordered but above-threshold claim with no itemized bill.
-        if any(
-            normalize(t) in normalize(text)
-            for t in rules.high_value_tests_requiring_pre_auth
+        ordered = [
+            test
             for text in clinical
-        ) and claim.claimed_amount > threshold:
+            if (test := match_high_value_test(policy, text)) is not None
+        ]
+        if any(t in known_tests for t in ordered) and claim.claimed_amount > threshold:
             return True, (
                 f"A high-value test was ordered and the claimed amount "
                 f"₹{claim.claimed_amount:,.0f} exceeds ₹{threshold:,.0f}."
@@ -530,8 +538,16 @@ def _adjudicate_line_items(
     return line_items
 
 
+def _line_is_consultation(li: LineItem, policy: Policy) -> bool:
+    """Whether a line item is a consultation fee: LLM tag if present,
+    else the deterministic alias matcher ('OPD visit fee', 'doctor charges')."""
+    if li.is_consultation_fee is not None:
+        return li.is_consultation_fee
+    return is_consultation_fee(policy, li.description)
+
+
 def _sub_limit_base(
-    category: ClaimCategory, line_items: list[LineItem], eligible: float
+    category: ClaimCategory, line_items: list[LineItem], eligible: float, policy: Policy
 ) -> float:
     """The amount the category sub-limit applies to.
 
@@ -543,7 +559,7 @@ def _sub_limit_base(
         consultation_portion = sum(
             li.amount
             for li in line_items
-            if li.status == LineItemStatus.APPROVED and "consultation" in normalize(li.description)
+            if li.status == LineItemStatus.APPROVED and _line_is_consultation(li, policy)
         )
         # If nothing is labelled 'consultation', the whole claim is treated as consult.
         return consultation_portion if consultation_portion > 0 else eligible

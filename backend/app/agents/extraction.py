@@ -27,7 +27,12 @@ from app.contracts.enums import DocumentQuality, ExtractionMethod
 from app.contracts.inputs import DocumentInput
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
-from app.rules.tagging import merge_tags, tag_deterministic, validate_llm_tags
+from app.rules.tagging import (
+    merge_tags,
+    tag_deterministic,
+    tag_line_items,
+    validate_llm_tags,
+)
 from app.util import parse_iso_date
 
 COMPONENT = "ExtractionAgent"
@@ -69,6 +74,7 @@ def _from_provided_content(
     extracted.tags = tag_deterministic(
         policy, extracted.diagnosis, extracted.treatment, *extracted.tests_ordered
     )
+    tag_line_items(policy, extracted.line_items)
     return extracted
 
 
@@ -118,7 +124,9 @@ def _from_llm_read(
     )
     merged = merge_tags(clean_llm_tags, det_tags, file_id=doc.file_id)
     extracted.tags = merged.tags
-    for warning in warnings + merged.warnings:
+    warnings.extend(merged.warnings)
+    warnings.extend(tag_line_items(policy, extracted.line_items))
+    for warning in warnings:
         trace.warn(COMPONENT, warning)
     return extracted
 

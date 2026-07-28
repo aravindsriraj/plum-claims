@@ -85,13 +85,15 @@ Behavior contract:
 
 | | |
 |---|---|
-| **Input** | `claim: ClaimInput`; `member_name: str`; `docs: list[ExtractedDocument]`; `policy: Policy` |
+| **Input** | `claim: ClaimInput`; `member_name: str`; `docs: list[ExtractedDocument]`; `policy: Policy`; `llm: LlmClient \| None` |
 | **Output** | `list[str]` — human-readable warnings (empty = all consistent) |
 | **Raises** | nothing for data problems; `RuntimeError` when `claim.simulate_component_failure` is true (by design) |
 
-Checks (warnings only, never hard-stops): patient name vs roster name;
-document dates within 3 days of treatment date; claimed amount vs sum of
-bill totals; prescription presence when the category requires one.
+Checks (warnings only, never hard-stops): patient name vs roster name (with LLM
+second opinion via `LlmNameVerdict` when names differ, clearing false
+mismatches like "R. Kumar" vs "Rajesh Kumar"); document dates within 3 days of
+treatment date; claimed amount vs sum of bill totals; provider form vs docs;
+prescription presence when category requires one.
 
 ---
 
@@ -192,17 +194,14 @@ Guarantee: the pipeline never propagates a component exception to the API.
 
 ---
 
-## 9. ExplanationBuilder
+## 9. ExplanationBuilder & MemberMessagePolisher
 
-**File:** `app/agents/explanation.py`
+**Files:** `app/agents/explanation.py`, `app/agents/member_message.py`
 
-| | |
-|---|---|
-| **Input** | `ClaimResponse` (fully populated except `explanation`) |
-| **Output** | `str` — ops narrative: status line, issues/decision summary, financial breakdown, numbered trace |
-| **Raises** | — |
-
-Deterministic templating only; no LLM.
+| Component | Input | Output | Behavior |
+|---|---|---|---|
+| `build_explanation` | `ClaimResponse` | `str` (ops narrative) | Pure deterministic templating from trace events — no LLM. |
+| `polish_member_message` | `template: str`, `llm`, `trace` | `str` (warm prose) | LLM prose pass. Every figure in the template (amounts, dates, %) MUST be preserved verbatim in the rewrite; otherwise falls back to template. |
 
 ---
 

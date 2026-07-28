@@ -59,6 +59,15 @@ class LineItem(BaseModel):
         default=None,
         description="Verbatim policy procedure/item this line maps to (set by tagging)",
     )
+    is_consultation_fee: bool | None = Field(
+        default=None,
+        description="Perception tag: is this line a consultation/visit fee? "
+        "None = untagged (adjudicator falls back to alias matching)",
+    )
+    matched_high_value_test: str | None = Field(
+        default=None,
+        description="Canonical high-value test name if this line is one (set by tagging)",
+    )
 
 
 class PolicyTag(BaseModel):

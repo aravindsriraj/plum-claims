@@ -134,6 +134,28 @@ class Policy(BaseModel):
         """Network hospital names, pre-normalized for containment matching."""
         return [normalize(h) for h in self.network_hospitals]
 
+    @cached_property
+    def high_value_test_aliases(self) -> dict[str, list[str]]:
+        """Canonical high-value test name -> normalized aliases.
+
+        Keys correspond to `high_value_tests_requiring_pre_auth` entries in
+        the category rules; aliases cover full names and scan shorthand.
+        """
+        return {
+            name: [normalize(a) for a in aliases]
+            for name, aliases in self.raw.get("matching_aliases", {})
+            .get("high_value_tests", {})
+            .items()
+        }
+
+    @cached_property
+    def consultation_fee_aliases(self) -> list[str]:
+        """Normalized phrases identifying a consultation-fee line item."""
+        return [
+            normalize(a)
+            for a in self.raw.get("matching_aliases", {}).get("consultation_fee", [])
+        ]
+
     @property
     def network_hospitals(self) -> list[str]:
         return list(self.raw["network_hospitals"])

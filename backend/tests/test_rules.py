@@ -321,6 +321,76 @@ class TestAdjudication:
         assert "pre-authorization" in failing.reason.lower()
         assert "resubmit" in failing.reason.lower()
 
+    def test_mri_synonym_magnetic_resonance_imaging_triggers_pre_auth(self):
+        """Synonym 'Magnetic Resonance Imaging' maps to MRI via policy aliases."""
+        claim = make_claim(
+            member_id="EMP007",
+            claim_category=ClaimCategory.DIAGNOSTIC,
+            treatment_date=date(2024, 11, 2),
+            claimed_amount=15000,
+        )
+        docs = [
+            make_doc(
+                line_items=[
+                    LineItem(
+                        description="Magnetic Resonance Imaging (Brain) with contrast",
+                        amount=15000,
+                    )
+                ],
+                total=15000,
+            )
+        ]
+        result = run(claim, docs)
+        assert result.hard_failed
+        assert "PRE_AUTH_MISSING" in result.rejection_reasons
+
+    def test_tagged_high_value_test_triggers_pre_auth_regardless_of_description(self):
+        """LLM tag matched_high_value_test='MRI' drives pre-auth check directly."""
+        claim = make_claim(
+            member_id="EMP007",
+            claim_category=ClaimCategory.DIAGNOSTIC,
+            treatment_date=date(2024, 11, 2),
+            claimed_amount=15000,
+        )
+        docs = [
+            make_doc(
+                line_items=[
+                    LineItem(
+                        description="Specialized Neuro Scan",
+                        amount=15000,
+                        matched_high_value_test="MRI",
+                    )
+                ],
+                total=15000,
+            )
+        ]
+        result = run(claim, docs)
+        assert result.hard_failed
+        assert "PRE_AUTH_MISSING" in result.rejection_reasons
+
+    def test_consultation_synonym_doctor_visit_fee_caps_portion(self):
+        """'Doctor Visit Fee' matches consultation fee alias -> caps portion at sub-limit."""
+        claim = make_claim(
+            member_id="EMP001",
+            claim_category=ClaimCategory.CONSULTATION,
+            treatment_date=date(2024, 11, 1),
+            claimed_amount=3000,
+        )
+        docs = [
+            make_doc(
+                line_items=[
+                    LineItem(description="Doctor Visit Fee", amount=2500),
+                    LineItem(description="Blood Test", amount=500),
+                ],
+                total=3000,
+                provider="City Medical Centre",
+            )
+        ]
+        result = run(claim, docs)
+        assert not result.hard_failed
+        # Consultation portion 2500 capped at sub-limit 2000 + 500 = 2500 eligible -> 10% co-pay -> 2250 approved
+        assert result.approved_amount == 2250
+
     def test_tc008_per_claim_limit_rejected(self):
         claim = make_claim(
             member_id="EMP003",

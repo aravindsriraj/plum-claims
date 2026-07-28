@@ -208,7 +208,25 @@
       "Cosmetic or aesthetic procedures": ["cosmetic", "aesthetic", "teeth whitening", "whitening", "veneers", "bleaching"],
       "Vaccination (non-medically necessary)": ["vaccination", "vaccine", "immunization"],
       "Health supplements and tonics": ["health supplement", "supplements", "tonic", "multivitamin"]
-    }
+    },
+    "high_value_tests": {
+      "MRI": ["mri", "magnetic resonance imaging", "mr scan"],
+      "CT Scan": ["ct scan", "ct", "computed tomography", "hrct"],
+      "PET Scan": ["pet scan", "positron emission tomography", "pet ct"]
+    },
+    "consultation_fee": [
+      "consultation",
+      "consultation fee",
+      "opd consultation",
+      "opd visit",
+      "doctor visit",
+      "visit fee",
+      "doctor fee",
+      "doctor charges",
+      "physician fee",
+      "physician consultation",
+      "review consultation"
+    ]
   },
   "members": [
     {

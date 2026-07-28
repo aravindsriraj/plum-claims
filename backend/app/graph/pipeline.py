@@ -111,7 +111,7 @@ def cross_validate_node(state: ClaimState) -> dict:
             raise RuntimeError("Simulated component failure (fault injection)")
         return cross_validate(
             state["claim"], state["member_name"], state["extracted_documents"],
-            state["policy"], trace,
+            state["policy"], trace, llm=state.get("llm"),
         )
 
     warnings = run_resilient(

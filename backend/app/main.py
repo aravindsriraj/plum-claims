@@ -29,10 +29,13 @@ from app.service import ClaimService
 async def lifespan(app: FastAPI):
     """Build the service once at startup. The LLM client is created only when
     a key is configured — without one, simulation-mode claims still work and
-    vision-mode claims degrade gracefully via the resilience wrapper."""
+    vision-mode claims degrade gracefully via the resilience wrapper.
+    CLAIMS_POLISH_MESSAGES=false disables the member-message prose pass
+    (used by tests to stay fully deterministic)."""
     policy = load_policy()
     llm = LlmClient() if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") else None
-    app.state.claim_service = ClaimService(policy, llm)
+    polish = os.getenv("CLAIMS_POLISH_MESSAGES", "true").lower() != "false"
+    app.state.claim_service = ClaimService(policy, llm, polish_messages=polish)
     yield
 
 

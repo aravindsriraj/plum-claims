@@ -75,12 +75,14 @@ def _vocabulary(policy: Policy, category: ClaimCategory) -> dict[str, str]:
     rules = policy.category_rules(category)
     covered = rules.covered_procedures + rules.covered_items
     excluded = rules.excluded_procedures + rules.excluded_items
+    hv_tests = rules.high_value_tests_requiring_pre_auth
     return {
         "category": category.value,
         "condition_keys": ", ".join(policy.specific_condition_waiting_days) or "(none)",
         "exclusion_entries": "\n".join(f"- {e}" for e in policy.excluded_conditions),
         "covered_procedures": ", ".join(covered) if covered else "(no list — judge by exclusion entries only)",
         "excluded_procedures": ", ".join(excluded) if excluded else "(none)",
+        "high_value_tests": ", ".join(hv_tests) if hv_tests else "(none for this category)",
     }
 
 

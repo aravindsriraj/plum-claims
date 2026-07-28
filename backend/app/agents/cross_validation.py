@@ -5,15 +5,23 @@ and can route to manual review via soft signals. Hard stops for identity
 problems already happened in DocumentVerificationAgent.
 
 Checks:
-  1. Patient name on documents vs member roster name.
+  1. Patient name on documents vs member roster name. Exact matching is
+     deterministic; when names differ, an LLM second opinion (perception —
+     "is 'R. Kumar' the same person as 'Rajesh Kumar'?") can CLEAR the
+     warning, never create one. No LLM / LLM disagrees -> warning stands.
   2. Document dates vs the claimed treatment date.
   3. Bill total vs the claimed amount.
-  4. Prescription requirement (category rules) — is a prescription among the
+  4. Provider on the claim form vs provider on the documents.
+  5. Prescription requirement (category rules) — is a prescription among the
      extracted docs when the category mandates one?
 """
 
+from pydantic import BaseModel, Field
+
 from app.contracts.documents import ExtractedDocument
 from app.contracts.inputs import ClaimInput
+from app.llm.client import LlmClient
+from app.llm.prompts import NAME_RECONCILIATION_PROMPT
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.textnorm import normalize
@@ -25,12 +33,41 @@ COMPONENT = "CrossValidationAgent"
 DATE_TOLERANCE_DAYS = 3
 
 
+class LlmNameVerdict(BaseModel):
+    """Structured output for name reconciliation: are these the same person?"""
+
+    same_person: bool
+    rationale: str = Field(default="")
+
+
+def _reconcile_names(
+    member_name: str, mismatched: list[str], llm: LlmClient | None
+) -> list[str]:
+    """LLM second opinion on name mismatches (perception, warning-level only).
+
+    Returns the subset of names the LLM could NOT reconcile with the member.
+    Without an LLM, every mismatch stands (deterministic behavior unchanged).
+    """
+    if llm is None:
+        return mismatched
+    unreconciled: list[str] = []
+    for name in mismatched:
+        verdict = llm.structured(
+            LlmNameVerdict,
+            NAME_RECONCILIATION_PROMPT.format(member_name=member_name, doc_name=name),
+        )
+        if not verdict.same_person:
+            unreconciled.append(name)
+    return unreconciled
+
+
 def cross_validate(
     claim: ClaimInput,
     member_name: str,
     docs: list[ExtractedDocument],
     policy: Policy,
     trace: TraceRecorder,
+    llm: LlmClient | None = None,
 ) -> list[str]:
     """Run consistency checks. Returns soft-warning strings for the trace and
     (via the caller) the decision notes. Never raises on data problems."""
@@ -43,11 +80,19 @@ def cross_validate(
         member_norm = normalize(member_name)
         mismatched = [n for n in doc_names if normalize(n) != member_norm]
         if mismatched:
-            warnings.append(
-                f"Extracted patient name(s) {mismatched} do not match member "
-                f"'{member_name}'."
-            )
-            trace.warn(COMPONENT, warnings[-1])
+            unreconciled = _reconcile_names(member_name, mismatched, llm)
+            if unreconciled:
+                warnings.append(
+                    f"Extracted patient name(s) {unreconciled} do not match member "
+                    f"'{member_name}'."
+                )
+                trace.warn(COMPONENT, warnings[-1])
+            else:
+                trace.check(
+                    COMPONENT, True,
+                    f"Name variant(s) {mismatched} reconciled with member "
+                    f"'{member_name}' (LLM second opinion).",
+                )
         else:
             trace.check(COMPONENT, True, f"Patient name '{member_name}' consistent across documents.")
     else:

@@ -45,4 +45,28 @@ matched_exclusions — policy exclusions the treatment clearly falls under (entr
 
 line item matched_policy_item — if a billed line clearly corresponds to a {category} procedure/item below, set it verbatim on that line item:
   covered: {covered_procedures}
-  excluded: {excluded_procedures}"""
+  excluded: {excluded_procedures}
+
+line item matched_high_value_test — if a billed line is one of these high-value diagnostics, set the canonical name verbatim (e.g. "Magnetic Resonance Imaging" -> MRI, "HRCT Chest" -> CT Scan): {high_value_tests}
+
+line item is_consultation_fee — set true if the line is a doctor consultation/visit fee (any wording: "OPD visit", "doctor charges", "physician fee"), false for tests/medicines/procedures."""
+
+NAME_RECONCILIATION_PROMPT = """You are comparing two Indian names for an insurance claim. Decide whether they plausibly refer to the SAME person.
+
+Name on policy roster: {member_name}
+Name on medical document: {doc_name}
+
+Indian name conventions to allow:
+- Initials expanded or abbreviated either way ("R. Kumar" ~ "Rajesh Kumar")
+- Name-order swaps ("Kumar Rajesh" ~ "Rajesh Kumar")
+- Missing middle names or honorifics (Dr./Shri/Smt.)
+- Common transliteration variants of the SAME name ("Sneha" ~ "Sneha")
+
+Be conservative: different given names ("Arjun" vs "Rajesh") or clearly different people must return same_person=false. When in doubt, return false."""
+
+MEMBER_MESSAGE_PROMPT = """Rewrite this insurance claim status message for the member in warm, plain language. Rules:
+- Keep the outcome and ALL numbers (amounts, dates, percentages) EXACTLY as given — never change, round, or invent figures.
+- 2-3 sentences, empathetic and professional, no jargon.
+- Do not add advice, promises, or timelines that are not in the original.
+
+Original message: {template_message}"""

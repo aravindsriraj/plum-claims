@@ -15,6 +15,7 @@ import uuid
 from collections.abc import Iterator
 
 from app.agents.explanation import build_explanation
+from app.agents.member_message import polish_member_message
 from app.contracts.enums import ClaimStatus
 from app.contracts.inputs import ClaimInput
 from app.contracts.responses import ClaimResponse, ProcessingMeta
@@ -37,9 +38,17 @@ STAGES: list[tuple[str, str]] = [
 class ClaimService:
     """Stateless service — safe to share one instance across requests."""
 
-    def __init__(self, policy: Policy, llm: LlmClient | None = None) -> None:
+    def __init__(
+        self,
+        policy: Policy,
+        llm: LlmClient | None = None,
+        polish_messages: bool = True,
+    ) -> None:
         self._policy = policy
         self._llm = llm
+        # Member-message polish (LLM prose pass) — off in evals/tests so the
+        # deterministic template is what's asserted.
+        self._polish = polish_messages
         self._graph = build_graph()
 
     def _initial_state(self, claim: ClaimInput, trace: TraceRecorder) -> dict:
@@ -136,6 +145,16 @@ class ClaimService:
                 "MANUAL_REVIEW": "Your claim needs a manual review by our team. "
                 "We'll follow up shortly — no action needed from you right now.",
             }[decision.decision.value]
+            # Optional prose polish: the LLM rewrites style only, validated to
+            # preserve every figure; any failure keeps the template.
+            if self._polish and self._llm is not None:
+                try:
+                    member_message = polish_member_message(member_message, self._llm, trace)
+                except Exception as exc:  # noqa: BLE001 — prose pass must never break a decision
+                    trace.warn(
+                        "MemberMessagePolisher",
+                        f"Polish failed ({type(exc).__name__}); template message kept.",
+                    )
 
         response = ClaimResponse(
             claim_id=claim_id,

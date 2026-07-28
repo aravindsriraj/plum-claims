@@ -33,6 +33,68 @@ class TagMergeResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+def match_high_value_test(policy: Policy, description: str | None) -> str | None:
+    """The canonical high-value test a line-item description refers to, or None.
+
+    Alias-based, so "Magnetic Resonance Imaging (Brain)" resolves to MRI just
+    as "MRI Brain" does — the pre-auth JUDGMENT (threshold comparison) stays
+    in the adjudicator; only recognition lives here.
+    """
+    hay = normalize(description)
+    if not hay:
+        return None
+    for name, aliases in policy.high_value_test_aliases.items():
+        candidates = [normalize(name), *aliases]
+        if any(contains_normalized(hay, a) for a in candidates if a):
+            return name
+    return None
+
+
+def is_consultation_fee(policy: Policy, description: str | None) -> bool:
+    """True if a line item is a consultation/doctor-visit fee.
+
+    Alias-based ("OPD visit fee", "doctor charges", ...), so the consultation
+    sub-limit caps the right portion even when bills don't say the literal
+    word 'consultation'.
+    """
+    hay = normalize(description)
+    if not hay:
+        return False
+    return any(
+        contains_normalized(hay, alias)
+        for alias in policy.consultation_fee_aliases
+        if alias
+    )
+
+
+def tag_line_items(
+    policy: Policy, line_items: list, known_tests: list[str] | None = None
+) -> list[str]:
+    """Fill per-line perception tags in place; return warnings.
+
+    Union semantics per field: an LLM-set value is kept (after validation —
+    a high-value-test tag must name a test the policy actually lists), and
+    any field the LLM left unset is filled by the deterministic matcher.
+    Used by extraction in BOTH modes, so the adjudicator always sees tags.
+    """
+    warnings: list[str] = []
+    valid_tests = set(known_tests or policy.high_value_test_aliases.keys())
+    for li in line_items:
+        if getattr(li, "is_consultation_fee", None) is None:
+            li.is_consultation_fee = is_consultation_fee(policy, li.description)
+        tag = getattr(li, "matched_high_value_test", None)
+        if tag is not None and tag not in valid_tests:
+            warnings.append(
+                f"LLM tagged '{li.description}' as unknown high-value test "
+                f"'{tag}' — dropped; deterministic matcher re-evaluated it."
+            )
+            tag = None
+        if tag is None:
+            tag = match_high_value_test(policy, li.description)
+        li.matched_high_value_test = tag
+    return warnings
+
+
 def tag_deterministic(policy: Policy, *texts: str | None) -> DocumentTags:
     """Alias-based tagging of clinical text against the policy vocabulary.
 
