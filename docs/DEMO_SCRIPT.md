@@ -1,147 +1,231 @@
-# Demo Video Script (8–12 minutes)
+# Demo Video Script (8–12 Minutes)
+## Health Insurance Claims Processing System — Plum AI Pod
 
-Assignment requires **exactly three beats**. Everything else is optional color.
-Timings are targets — stay tight; prefer clear narration over more scenarios.
-
-| Beat | Time | What reviewers must see |
-|------|------|-------------------------|
-| **A** | ~2 min | Document problem → early stop → **specific** error message |
-| **B** | ~4–5 min | Clean approval end-to-end → **full audit trace** visible |
-| **C** | ~3 min | One decision you’re **proud of** + one you’d **change** with more time |
-
-Live UI: https://claims-ui-968299856642.asia-south1.run.app  
-API health: https://claims-api-968299856642.asia-south1.run.app/health  
-Design line to repeat: **“LLMs for perception, code for judgment.”**
+This script is the definitive, word-for-word recording guide for the **8–12 minute demo video**. It reflects the actual implementation, LangGraph node sequence, multi-agent architecture, and deterministic rule engine.
 
 ---
 
-## 0. Intro (0:00–0:45)
+## Executive Overview & Video Agenda
 
-> *“Hi — this is Plum’s AI claims processing system. Members upload medical documents; we verify them early, extract with Gemini vision, then decide APPROVED / PARTIAL / REJECTED / MANUAL_REVIEW against `policy_terms.json`. Vision and tagging are LLM perception. Waiting periods, co-pays, and limits are deterministic Python — never the model.”*
-
-- Open the live UI (or localhost:3000).
-- Optional one-liner: show `/health` → `llm_configured: true`.
-
----
-
-## 1. Beat A — Early stop on a document problem (0:45–2:45)
-
-**Goal:** Prove requirement #2 — stop before adjudication, with a member-actionable message.
-
-**Scenario (TC001):** CONSULTATION needs a hospital bill; member uploads two prescriptions.
-
-1. Fill the form:
-   - Member: **EMP001 — Rajesh Kumar**
-   - Category: **CONSULTATION**
-   - Treatment date: **2024-11-01**
-   - Claimed amount: **1500**
-   - Documents: `prescription_rajesh.jpg` **twice** (rename one copy to `another_prescription.jpg` so both filenames show in the error)
-
-2. Click **Submit claim**. Watch the live checklist — processing should stop after document read/verify (no full adjudication path).
-
-3. On camera, read the status **`DOCUMENT_REJECTED`** and the exact issue text, e.g.:
-   > *`[MISSING_DOCUMENT]` … consultation claim requires a hospital bill, but you uploaded … (PRESCRIPTION) … Please upload your hospital bill …*
-
-4. Call out three things in one breath:
-   - Message names **what was uploaded** and **what to upload next** (not a generic failure).
-   - **`decision` is empty** — we never paid or rejected the claim on policy rules.
-   - Trace shows the pipeline **halted at document verification**, before money rules ran.
-
-**Optional 20s (only if time):** swap in `blurry_bill.jpg` → `UNREADABLE_DOCUMENT` (“re-upload a clearer photo”) — still early stop, still actionable.
+| Section | Duration | Target Deliverable & Architectural Focus |
+|---|---|---|
+| **0. Introduction & Architecture Line** | 0:00 – 1:00 (1 min) | System design, design principle, live URLs (`claims-ui`, `claims-api`). |
+| **1. Beat A — Early Stop Document Gate** | 1:00 – 3:00 (2 mins) | Uploading wrong documents, instant gate halt, specific actionable error message. |
+| **2. Beat B — End-to-End Approval & Audit Trace** | 3:00 – 7:30 (4.5 mins) | Gemini vision perception, parallel `Send` fan-out, multi-agent pipeline, financial calculation, full audit trace walkthrough. |
+| **3. Beat C — Engineering Trade-offs (Proud Of & Would Change)** | 7:30 – 10:30 (3.5 mins) | **Proud of**: Resilient fault tolerance & confidence degradation (`run_resilient` & TC011).<br>**Would change**: In-memory `MemorySaver` $\rightarrow$ `PostgresSaver` for multi-instance Cloud Run at 10x scale. |
+| **4. Conclusion & Summary** | 10:30 – 11:00 (0.5 min) | Unit test coverage (64/64), eval benchmark report (12/12), repo deliverables. |
 
 ---
 
-## 2. Beat B — Successful end-to-end approval + full trace (2:45–7:30)
+## Architecture Summary Reference
 
-**Goal:** Prove requirements #3–#5 — extract, decide, explain.
+```
+                             Claims Orchestrator (LangGraph)
+                                           │
+         ┌─────────────────────────────────┼─────────────────────────────────┐
+         ▼                                 ▼                                 ▼
+ DocumentPerceptionAgent             ClinicalAgent                    ConsistencyAgent
+ (tool-calling, ×N Send fan-out)     (tool-calling)                   (tool-calling)
+         │                                 │                                 │
+         └────────────────────────┬────────┴─────────────────────────────────┘
+                                  ▼
+                        Document Gate (rules) ── fail ──▶ DOCUMENT_REJECTED
+                                  │ pass
+                                  ▼
+                        Policy Adjudicator ──▶ Fraud ──▶ Synthesizer ──▶ Human Review Gate?
+```
 
-**Scenario (clean consultation / TC004-style):** EMP001, CONSULTATION, ₹1,500, documents `prescription_rajesh.jpg` + `bill_rajesh.jpg`.
-
-1. **Submit and show live progress** (NDJSON stream → checklist):
-   - Reading documents → Verifying document set → Clinical policy tagging → Cross-checking details → Applying policy rules → Fraud screening → Finalizing decision → Human review  
-   - One line: *“Each checkbox is a real LangGraph node finishing — not a fake spinner.”*
-
-2. **Decision card — say the numbers out loud:**
-   - Outcome: **`APPROVED`**
-   - **₹1,350** of **₹1,500** (10% co-pay → ₹150 member share)
-   - Point at **LLM call count** (vision reads + optional polish) — perception cost is visible, judgment is code
-   - Read the **member message**; note the safety rail: polished prose is rejected if any ₹ / % / date from the template is missing
-
-3. **Scroll the audit trace slowly** (this is the money shot for Observability):
-   Walk 5–6 concrete lines, not every event:
-   1. Documents classified (PRESCRIPTION + HOSPITAL_BILL) with confidence / quality  
-   2. Extraction: diagnosis, line items, amounts  
-   3. Clinical tagging / cross-check: roster name match (and any soft warnings)  
-   4. Adjudication checks: waiting period, exclusions, sub-limits, co-pay — all **PASS** with reasons  
-   5. Fraud: no velocity signals  
-   6. Synthesizer: **APPROVED**, confidence score, approved amount  
-
-   Closing line for this beat:
-   > *“Ops can reconstruct this claim from the trace alone — no black box.”*
-
-**Optional 30s (only if ahead of time):** set hospital to **Apollo Hospitals**, amount **4500** — show network discount **before** co-pay in the adjustments list (TC010 ordering).
-
-**Optional 30s:** flip to LangSmith project `plum-claims`, open this run’s **`ProcessClaim`** tree (graph nodes → `GeminiStructured` / `ClinicalTaggingAgent`). Nice for Observability weight — not a substitute for the in-UI trace.
+### Design Thesis: "LLMs for Perception, Code for Judgment"
+* **Perception (LLMs)**: Three tool-calling Gemini agents: `DocumentPerceptionAgent` (vision OCR & extraction), `ClinicalAgent` (medical text to policy vocabulary mapping), and `ConsistencyAgent` (soft cross-checks).
+* **Control (LangGraph)**: Manages pipeline stages, parallel document fan-out (`Send`), early stop routing, and Human-in-the-loop (`interrupt()`).
+* **Judgment (Pure Python)**: All financial logic, waiting periods, sub-limits, co-pays, network discounts, and velocity fraud rules are strictly enforced by deterministic code reading directly from `policy_terms.json`.
 
 ---
 
-## 3. Beat C — Proud of / would change (7:30–11:00)
+## Mock Assets Required
 
-### Proud of — show it, don’t only talk about it
-
-**Pick one (recommended: graceful degradation — assignment requirement #6):**
-
-1. Same clean claim form; check **“Simulate a component failure”**; submit.
-2. Show on screen:
-   - Still **`DECIDED` / APPROVED** (or decided outcome) — **no 500**
-   - **Degraded** flag / warning in the response
-   - **Confidence drops** vs the clean run
-   - Trace records the component failure + fallback used
-3. Narrate:
-   > *“I’m proud that confidence comes from observable failures and document quality — not an LLM grading itself. If cross-validation dies, we continue with what we have and tell ops the run was degraded.”*
-
-**Alternate pride line (if you prefer architecture over the fault-injection demo):**
-> *“Proud of the hard split: Gemini and the clinical tool-calling agent only tag and extract; every rupee and waiting-period date is pure Python on `policy_terms.json`. That keeps evals deterministic and decisions explainable.”*
-
-### Would change given more time — one concrete next step
-
-Be honest about what already exists (don’t promise work you’ve already shipped):
-
-> *“HITL already pauses `MANUAL_REVIEW` with LangGraph `interrupt()` when `CLAIMS_HITL` is on, but the checkpointer is in-memory. At 10× load across multiple Cloud Run replicas I’d swap in `PostgresSaver` so a paused claim can resume on any instance, and add a reflection retry when extraction confidence is low before we ask the member to re-upload.”*
-
-Do **not** say you’d “add parallel document workers” — **`Send` fan-out is already live.**
+Generated via:
+```bash
+python scripts/generate_mock_docs.py
+```
+Output folder: `scripts/mock_docs/`
+* `prescription_rajesh.jpg` — Dr. Arun Sharma's prescription for Rajesh Kumar (01-Nov-2024).
+* `another_prescription.jpg` — Second prescription upload (used for Beat A wrong document type demo).
+* `bill_rajesh.jpg` — Itemized OPD consultation & test bill for Rajesh Kumar (₹1,500).
+* `blurry_bill.jpg` — Blurry, unreadable bill image (used for unreadable document demo).
+* `bill_apollo_deepak.jpg` — ₹4,500 Apollo Hospitals network bill for Deepak Shah.
 
 ---
 
-## 4. Outro (11:00–11:30)
+## Step-by-Step Script & Narration
 
-> *“Reproducibility: **63 unit tests**, **12/12** assignment evals in `docs/EVAL_REPORT.md`. Code on GitHub with Docker Compose and Cloud Run. Thanks.”*
+### Section 0: Introduction & Core Design Principle (0:00 – 1:00)
 
-Flash `docs/EVAL_REPORT.md` or a terminal `pytest` / eval summary if it fits in 15 seconds.
+**Screen Setup**: Open browser to `https://claims-ui-968299856642.asia-south1.run.app` (or `http://localhost:3000`).
 
----
-
-## Pre-flight checklist
-
-- [ ] UI loaded (Cloud Run or `docker compose up`) — cold start may take ~5–10s on first request
-- [ ] Mock docs ready (`scripts/generate_mock_docs.py` → `scripts/mock_docs/`):
-  - [ ] `prescription_rajesh.jpg`
-  - [ ] `another_prescription.jpg` (copy of prescription for Beat A)
-  - [ ] `bill_rajesh.jpg`
-  - [ ] Optional: `blurry_bill.jpg`
-- [ ] Browser zoom ~120%; mic check; hide bookmarks bar
-- [ ] Tabs ready: UI | (optional) LangSmith `plum-claims` | EVAL_REPORT or terminal
-- [ ] Practice Beat A error message once so you can read it without scrolling mid-sentence
-- [ ] Know your Beat C “proud” demo (fault-injection checkbox) and the exact “would change” sentence above
+**Spoken Transcript**:
+> "Hi everyone, welcome to the demo of Plum's AI-powered Health Insurance Claims Processing System.
+> 
+> When an employee submits a claim, our objective is to evaluate their medical documents accurately, transparently, and instantly against their employer's policy.
+> 
+> Our guiding design thesis is **'LLMs for perception, deterministic code for judgment'**.
+> 
+> We leverage Google Gemini 3.6 Flash for multi-modal vision OCR and clinical tagging. However, all claim adjudication—including waiting periods, exclusions, sub-limit caps, co-pays, and fraud velocity rules—is executed by deterministic Python code that reads directly from `policy_terms.json`.
+> 
+> Let's look at the live application and walk through the three core beats."
 
 ---
 
-## Timing guardrails
+### Section 1: Beat A — Early Stop Document Verification Gate (1:00 – 3:00)
 
-| If you’re over time | Cut first |
-|---------------------|-----------|
-| > 12 min | Optional blurry doc, Apollo network variant, LangSmith tab |
-| Still long | Shorten Beat B trace to **four** events |
-| Under 8 min | Add Apollo network ordering **or** 20s LangSmith tree |
+**Goal**: Demonstrate Requirement #2 — early document validation with a specific, member-actionable error message before running any policy adjudication.
 
-**Do not skip:** specific document error (A), approval numbers + scrolled trace (B), on-camera proud demo + one change (C).
+**Action on Screen**:
+1. Form inputs:
+   * **Member ID**: `EMP001` (Rajesh Kumar)
+   * **Claim Category**: `CONSULTATION`
+   * **Treatment Date**: `2024-11-01`
+   * **Claimed Amount**: `1500`
+2. File Upload: Select `prescription_rajesh.jpg` AND `another_prescription.jpg` (two prescriptions, no hospital bill).
+3. Click **Submit Claim**.
+
+**Observe UI Behavior**:
+* Live NDJSON stream checklist starts.
+* System halts immediately after `verify_document_set` (Document Verification Gate).
+* Status displays: **`DOCUMENT_REJECTED`**.
+* Error Message displayed:
+  `[MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'prescription_rajesh.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.`
+
+**Spoken Transcript**:
+> "First, let's demonstrate early document verification. Under our loaded policy terms, a `CONSULTATION` claim requires both a Doctor's Prescription AND a Hospital Bill. Here, I'm uploading two prescriptions instead of a hospital bill.
+> 
+> Watch what happens when I submit:
+> 1. The pipeline halts immediately at the `verify_document_set` gate node before running any policy rules or financial math.
+> 2. The status is **`DOCUMENT_REJECTED`**, and no claim decision is generated.
+> 3. Crucially, the error message is specific and actionable:
+>    `[MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'prescription_rajesh.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.`
+> 
+> The member is told exactly what was found, what is missing, and what to upload next."
+
+---
+
+### Section 2: Beat B — End-to-End Clean Approval & Full Audit Trace (3:00 – 7:30)
+
+**Goal**: Demonstrate Requirements #3–#5 — multi-modal extraction, policy adjudication, and a complete explainable audit trace.
+
+**Action on Screen**:
+1. Reset form.
+2. Form inputs:
+   * **Member ID**: `EMP001` (Rajesh Kumar)
+   * **Claim Category**: `CONSULTATION`
+   * **Treatment Date**: `2024-11-01`
+   * **Claimed Amount**: `1500`
+3. File Upload: Select `prescription_rajesh.jpg` AND `bill_rajesh.jpg`.
+4. Click **Submit Claim**.
+
+**Observe UI Behavior**:
+* NDJSON stage checklist updates live:
+  1. `document_worker` (parallel fan-out via LangGraph `Send`)
+  2. `verify_document_set` (PASS)
+  3. `clinical_tagging` (ClinicalAgent tool-calling)
+  4. `cross_validate` (ConsistencyAgent checks)
+  5. `adjudicate` (AdjudicationEngine)
+  6. `fraud_check` (FraudAgent velocity screening)
+  7. `synthesize_decision` (Final decision & confidence)
+  8. `human_review_gate`
+* Decision Card renders:
+  * Decision: **`APPROVED`**
+  * Claimed: **₹1,500** | Approved: **₹1,350**
+  * Confidence Score: **0.98**
+  * Financial Breakdown: **10% Co-pay applied (₹150 member share, ₹1,350 payable)**.
+
+**Spoken Transcript**:
+> "Now let's submit a complete consultation claim with `prescription_rajesh.jpg` and `bill_rajesh.jpg`.
+> 
+> As the NDJSON stream progresses:
+> * `document_worker` uses LangGraph `Send` to process each document in parallel.
+> * Gemini 3.6 Flash Vision extracts the doctor's registration (`KA/45678/2015`), diagnosis (`Viral Fever`), and itemized bill lines (`Consultation Fee ₹1,000`, `CBC ₹300`, `Dengue NS1 ₹200`).
+> * `ClinicalAgent` tags clinical entities against `policy_terms.json`.
+> * `ConsistencyAgent` verifies that patient name 'Rajesh Kumar' matches across documents and roster.
+> * `AdjudicationEngine` evaluates policy rules: member validity, initial waiting period, exclusions, sub-limits, and applies the 10% co-pay.
+> 
+> Out of ₹1,500 claimed, the approved payout is **₹1,350** with a confidence score of **0.98**.
+> 
+> Let's scroll through the **Processing Trace** table below. Every step is an auditable event:
+> 1. Document classification & extraction quality.
+> 2. Rule checks evaluated (`MEMBER_NOT_FOUND`, `WAITING_PERIOD`, `EXCLUDED_CONDITION` — all PASS).
+> 3. Financial adjustments (`COPAY: ₹1,500 -> ₹1,350`).
+> 4. Fraud checks (0 fraud score).
+> 
+> An operations reviewer can reconstruct every rupee of this decision directly from the trace."
+
+---
+
+### Section 3: Beat C — Engineering Trade-offs & Architecture (7:30 – 10:30)
+
+**Goal**: Demonstrate Requirement #6 (Graceful Degradation / Fault Tolerance) and discuss architectural choices.
+
+#### Part 1: What I'm Proud Of — Fault Tolerance & Resilient Fallback (TC011)
+
+**Action on Screen**:
+1. Check the box: **"Simulate a component failure (Fault Injection)"**.
+2. Submit the claim.
+
+**Observe UI Behavior**:
+* Pipeline completes with **`APPROVED`** (₹1,350).
+* Output flags: **`degraded: true`**.
+* Confidence score drops from **0.98 $\rightarrow$ 0.73**.
+* Processing trace records a `ComponentFailure` event: `RuntimeError: Simulated component failure (fault injection)`.
+
+**Spoken Transcript**:
+> "One technical decision I am genuinely proud of is our **Resilience & Graceful Degradation Wrapper**.
+> 
+> In real production, LLM services or external tools can experience transient errors or timeouts. A pipeline crash or 500 internal server error is unacceptable for claims operations.
+> 
+> Every graph node is executed inside `run_resilient()`. When I check 'Simulate a component failure', `ConsistencyAgent` raises a simulated exception mid-flight.
+> 
+> Look at how the system handles it:
+> 1. The pipeline **does not crash**—it completes and produces a valid adjudication response.
+> 2. The output flags `degraded: true`.
+> 3. The confidence score drops from **0.98 down to 0.73**, mathematically reflecting the component failure.
+> 4. An advisory note is generated recommending manual review before payout.
+> 
+> Confidence is derived from observable extraction quality and component failures—never an LLM grading its own work."
+
+#### Part 2: What I Would Change Given More Time
+
+**Spoken Transcript**:
+> "If I had more time or was scaling this system to 10x volume (10 million lives):
+> 
+> **What I would change**:
+> For human-in-the-loop (HITL) manual review pauses (`MANUAL_REVIEW`), we currently use LangGraph's `MemorySaver` checkpointer. In-memory state works cleanly for single instances, but scaling horizontally across multiple Cloud Run replicas requires persistent state.
+> 
+> I would replace `MemorySaver` with `PostgresSaver` (or Redis). This would allow an operations agent to review and resume a paused claim (`POST /claims/{id}/resume`) on any container instance in a multi-replica cluster."
+
+---
+
+### Section 4: Conclusion & Deliverables (10:30 – 11:00)
+
+**Screen Setup**: Show terminal or `docs/EVAL_REPORT.md`.
+
+**Spoken Transcript**:
+> "To summarize our deliverables:
+> * **Unit Test Suite**: 64 passing tests in `pytest tests/`.
+> * **Evaluation Harness**: 12/12 assignment test cases passing in `docs/EVAL_REPORT.md`.
+> * **Live Deployment**: Deployed on GCP Cloud Run (`claims-ui` and `claims-api`) with local Docker Compose support.
+> 
+> Thank you for reviewing!"
+
+---
+
+## Pre-Recording Checklist
+
+- [x] UI loaded on Cloud Run or `docker compose up` (`http://localhost:3000`).
+- [x] Mock document folder populated (`scripts/mock_docs/`):
+  - [x] `prescription_rajesh.jpg`
+  - [x] `another_prescription.jpg`
+  - [x] `bill_rajesh.jpg`
+  - [x] `blurry_bill.jpg`
+  - [x] `bill_apollo_deepak.jpg`
+- [x] Browser zoom set to 120% and resolution set to 1080p.
+- [x] Verified 64 unit tests and 12/12 evaluation cases.

@@ -81,15 +81,4 @@ Decide if the treatment, medicines, and tests are clinically consistent and stan
 - Return consistent=true if they align with standard medical practice.
 - Return consistent=false ONLY if there is an obvious clinical mismatch or anomaly. Provide a 1-sentence rationale."""
 
-OPS_SUMMARY_PROMPT = """You are an AI assistant writing a 3-bullet executive briefing for an operations manager reviewing a health insurance claim decision.
-Claim ID: {claim_id}
-Status: {status}
-Decision: {decision_value} (Approved ₹{approved_amount:,.0f} of ₹{claimed_amount:,.0f})
-Reasons: {reasons}
-Warnings / Signals: {warnings}
-
-Generate 3 concise, professional bullet points highlighting:
-1. Member eligibility & claim type overview
-2. Adjudication & financial outcome
-3. Any risk signals, warnings, or required ops actions"""
 

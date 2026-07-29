@@ -10,7 +10,7 @@ from datetime import date
 
 import pytest
 
-from app.agents.cross_validation import cross_validate
+from app.agents.consistency_agent import cross_validate
 from app.agents.decision import synthesize
 from app.agents.document_verification import verify_documents
 from app.agents.extraction import extract_documents
@@ -268,7 +268,7 @@ class TestCrossValidation:
     def test_llm_name_reconciliation_clears_mismatch_warning(self):
         """When names mismatch ('R. Kumar' vs 'Rajesh Kumar'), an LLM second opinion
         can confirm they refer to the same person and suppress the warning."""
-        from app.agents.cross_validation import LlmNameVerdict
+        from app.agents.consistency_agent import LlmNameVerdict
         from app.contracts.documents import ExtractedDocument
         from app.contracts.enums import ExtractionMethod
 
@@ -296,7 +296,7 @@ class TestCrossValidation:
 
     def test_llm_name_reconciliation_keeps_warning_when_different_person(self):
         """If the LLM concludes they are different people, the warning remains."""
-        from app.agents.cross_validation import LlmNameVerdict
+        from app.agents.consistency_agent import LlmNameVerdict
         from app.contracts.documents import ExtractedDocument
         from app.contracts.enums import ExtractionMethod
 
@@ -322,7 +322,7 @@ class TestCrossValidation:
 
     def test_llm_clinical_consistency_checks_treatment_aligns_with_diagnosis(self):
         """Clinical consistency check uses LLM to flag medical anomalies."""
-        from app.agents.cross_validation import LlmClinicalVerdict, LlmNameVerdict
+        from app.agents.consistency_agent import LlmClinicalVerdict, LlmNameVerdict
         from app.contracts.documents import ExtractedDocument
         from app.contracts.enums import ExtractionMethod
 

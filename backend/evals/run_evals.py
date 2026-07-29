@@ -98,14 +98,18 @@ def check_case(case: dict, response) -> list[str]:
     return failures
 
 
-def render_report(results: list[dict]) -> str:
+def render_report(results: list[dict], llm_enabled: bool = False) -> str:
     passed = sum(1 for r in results if not r["failures"])
+    mode_note = (
+        "LLM enabled (Gemini 3.6 Flash active for agent tasks)"
+        if llm_enabled
+        else "deterministic run, offline mode"
+    )
     lines = [
         "# Eval Report — 12 Test Cases",
         "",
         f"Generated: {datetime.now().isoformat(timespec='seconds')}  ",
-        f"Result: **{passed}/{len(results)} passed** (deterministic run, no LLM calls — "
-        f"documents use provided-content/metadata modes)",
+        f"Result: **{passed}/{len(results)} passed** ({mode_note})",
         "",
         "| Case | Name | Expected | Actual | Result |",
         "|------|------|----------|--------|--------|",
@@ -162,8 +166,12 @@ def render_report(results: list[dict]) -> str:
 
 
 def main() -> int:
+    import os
+    from app.llm.client import LlmClient
+
+    llm = LlmClient() if (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")) else None
     cases = json.loads((ROOT / "data" / "test_cases.json").read_text())["test_cases"]
-    service = ClaimService(load_policy(), llm=None)
+    service = ClaimService(load_policy(), llm=llm)
 
     results = []
     for case in cases:
@@ -192,7 +200,7 @@ def main() -> int:
             print(f"    - {f}")
 
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(render_report(results), encoding="utf-8")
+    REPORT_PATH.write_text(render_report(results, llm_enabled=llm is not None), encoding="utf-8")
     passed = sum(1 for r in results if not r["failures"])
     print(f"\n{passed}/{len(results)} passed. Report: {REPORT_PATH}")
     return 0 if passed == len(results) else 1

@@ -20,7 +20,7 @@ import operator
 from typing import Annotated, Any, Literal
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send, interrupt
+from langgraph.types import RetryPolicy, Send, interrupt
 from typing_extensions import TypedDict
 
 from app.agents.clinical_agent import run_clinical_tagging_agent
@@ -282,17 +282,19 @@ def human_review_gate_node(state: ClaimGraphState) -> dict:
     }
 
 
-def _route_after_verification(state: ClaimGraphState) -> Literal["stop", "continue"]:
-    return "stop" if state.get("document_issues") else "continue"
+def _route_after_verification(state: ClaimGraphState) -> list[str]:
+    return [END] if state.get("document_issues") else ["clinical_tagging", "cross_validate"]
 
 
 def build_graph(checkpointer=None):
     graph = StateGraph(ClaimGraphState)
 
-    graph.add_node("document_worker", document_worker_node)
+    retry_policy = RetryPolicy(max_attempts=2)
+
+    graph.add_node("document_worker", document_worker_node, retry_policy=retry_policy)
     graph.add_node("verify_document_set", verify_document_set_node)
-    graph.add_node("clinical_tagging", clinical_tagging_node)
-    graph.add_node("cross_validate", cross_validate_node)
+    graph.add_node("clinical_tagging", clinical_tagging_node, retry_policy=retry_policy)
+    graph.add_node("cross_validate", cross_validate_node, retry_policy=retry_policy)
     graph.add_node("adjudicate", adjudicate_node)
     graph.add_node("fraud_check", fraud_check_node)
     graph.add_node("synthesize_decision", synthesize_decision_node)
@@ -303,9 +305,9 @@ def build_graph(checkpointer=None):
     graph.add_conditional_edges(
         "verify_document_set",
         _route_after_verification,
-        {"stop": END, "continue": "clinical_tagging"},
+        ["clinical_tagging", "cross_validate", END],
     )
-    graph.add_edge("clinical_tagging", "cross_validate")
+    graph.add_edge("clinical_tagging", "adjudicate")
     graph.add_edge("cross_validate", "adjudicate")
     graph.add_edge("adjudicate", "fraud_check")
     graph.add_edge("fraud_check", "synthesize_decision")

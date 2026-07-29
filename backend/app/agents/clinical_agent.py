@@ -26,6 +26,8 @@ tests onto the insurer's policy vocabulary using the provided tools.
 Rules:
 - Call tools to verify exclusions, waiting-period conditions, and high-value tests.
 - Never invent policy entries — only return keys/entries the tools confirm.
+- Exclusions in `exclusions` apply ONLY to primary condition/diagnosis exclusions (e.g., Obesity, Substance Abuse, Self-inflicted injury, Bariatric surgery, Infertility).
+- Do NOT tag individual billed line-item procedures (such as teeth whitening, dental cleaning, or specific procedure line items) as overall document exclusions — line item procedures are adjudicated separately per line.
 - Never calculate co-pays, waiting dates, or approve/reject amounts.
 - Prefer precision: empty lists are better than guesses.
 """
@@ -97,17 +99,16 @@ def build_clinical_tools(policy: Policy) -> list:
 def _clinical_prompt(docs: list[ExtractedDocument]) -> str:
     blocks = []
     for d in docs:
-        items = "; ".join(f"{li.description} (₹{li.amount:,.0f})" for li in d.line_items) or "(none)"
         blocks.append(
             f"Document {d.file_id} ({d.doc_type.value}):\n"
             f"  diagnosis: {d.diagnosis or '(none)'}\n"
             f"  treatment: {d.treatment or '(none)'}\n"
             f"  medicines: {', '.join(d.medicines) or '(none)'}\n"
-            f"  tests_ordered: {', '.join(d.tests_ordered) or '(none)'}\n"
-            f"  line_items: {items}"
+            f"  tests_ordered: {', '.join(d.tests_ordered) or '(none)'}"
         )
     return (
         "Tag the following claim documents onto the policy vocabulary. "
+        "Identify document-level diagnosis/condition exclusions or waiting-period conditions. "
         "Use tools before finalizing.\n\n" + "\n\n".join(blocks)
     )
 

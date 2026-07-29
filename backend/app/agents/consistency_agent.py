@@ -352,3 +352,8 @@ def run_consistency_agent(
                 by_name["reconcile_name_with_llm"].invoke({"doc_name": doc_name})
     _apply_name_warnings(store, member_name, store["warnings"])
     return store["warnings"]
+
+
+# Alias for cross-validation checks
+cross_validate = run_consistency_agent
+

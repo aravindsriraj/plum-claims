@@ -133,7 +133,8 @@ if __name__ == "__main__":
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "mock_docs"
     out_dir.mkdir(parents=True, exist_ok=True)
     make_prescription(out_dir / "prescription_rajesh.jpg")
+    make_prescription(out_dir / "another_prescription.jpg")
     make_hospital_bill(out_dir / "bill_rajesh.jpg")
     make_blurry_bill(out_dir / "blurry_bill.jpg")
     make_apollo_bill(out_dir / "bill_apollo_deepak.jpg")
-    print(f"Generated 4 mock documents in {out_dir}")
+    print(f"Generated mock documents in {out_dir}")
