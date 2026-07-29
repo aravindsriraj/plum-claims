@@ -1,19 +1,19 @@
 # Demo Video Script (8–12 Minutes)
 ## Health Insurance Claims Processing System — Plum AI Pod
 
-This script is the definitive, word-for-word recording guide for the **8–12 minute demo video**. It reflects the actual implementation, LangGraph node sequence, parallel agent execution, and deterministic rule engine.
+This script is the definitive, word-for-word recording guide for the **8–12 minute demo video**. It provides step-by-step UI actions, exact spoken narration, functional breakdowns, and architectural justifications for every design choice.
 
 ---
 
 ## Executive Overview & Video Agenda
 
-| Section | Duration | Target Deliverable & Architectural Focus |
-|---|---|---|
-| **0. Introduction & Architecture Line** | 0:00 – 1:00 (1 min) | System design, design principle, live URLs (`claims-ui`, `claims-api`). |
-| **1. Beat A — Early Stop Document Gate** | 1:00 – 3:00 (2 mins) | Uploading wrong documents, instant gate halt, specific actionable error message. |
-| **2. Beat B — End-to-End Approval & Audit Trace** | 3:00 – 7:30 (4.5 mins) | Gemini vision perception, parallel `Send` fan-out, parallel agent super-step (`ClinicalAgent` + `ConsistencyAgent`), financial calculation, full audit trace walkthrough. |
-| **3. Beat C — Engineering Trade-offs (Proud Of & Would Change)** | 7:30 – 10:30 (3.5 mins) | **Proud of**: Resilient fault tolerance & confidence degradation (`run_resilient` & TC011).<br>**Would change**: In-memory `MemorySaver` $\rightarrow$ `PostgresSaver` for multi-instance Cloud Run at 10x scale. |
-| **4. Conclusion & Summary** | 10:30 – 11:00 (0.5 min) | Unit test coverage (64/64), eval benchmark report (12/12), repo deliverables. |
+| Section | Target Duration | Functional Focus | Architectural Rationale ("Why We Built It") |
+|---|---|---|---|
+| **0. Intro & Core Thesis** | 0:00 – 1:00 (1 min) | System overview & design thesis | Separate LLM perception from code judgment to eliminate financial hallucinations. |
+| **1. Beat A — Document Gate** | 1:00 – 3:00 (2 mins) | Early stop on invalid/missing uploads | Save token cost, halt invalid pipelines early, and give actionable member feedback. |
+| **2. Beat B — Clean Approval & Trace** | 3:00 – 7:30 (4.5 mins) | Vision OCR, multi-agent pipeline, financial chain | Parallel graph execution (35%+ speedup), dynamic policy JSON, 100% explainable trace. |
+| **3. Beat C — Engineering Trade-offs** | 7:30 – 10:30 (3.5 mins) | Fault-tolerance & confidence erosion (TC011) | Guarantee 0 API crashes via `run_resilient()`; mathematical confidence vs LLM self-grading. |
+| **4. Outro & Deliverables** | 10:30 – 11:00 (0.5 min) | Unit tests (64/64) & eval report (12/12) | Prove system reliability, reproducibility, and deployment readiness. |
 
 ---
 
@@ -59,11 +59,6 @@ This script is the definitive, word-for-word recording guide for the **8–12 mi
                                          (LangGraph interrupt Pause)
 ```
 
-### Design Thesis: "LLMs for Perception, Code for Judgment"
-* **Perception (LLMs)**: Three tool-calling Gemini agents: `DocumentPerceptionAgent` (vision OCR & extraction), `ClinicalAgent` (medical text to policy vocabulary mapping), and `ConsistencyAgent` (soft cross-checks). Attached with native LangGraph `RetryPolicy(max_attempts=2)`.
-* **Control (LangGraph)**: Manages pipeline stages, parallel document fan-out (`Send`), parallel agent super-steps (`clinical_tagging` + `cross_validate`), early stop routing, and Human-in-the-loop (`interrupt()`).
-* **Judgment (Pure Python)**: All financial logic, waiting periods, sub-limits, co-pays, network discounts, and velocity fraud rules are strictly enforced by deterministic code reading directly from `policy_terms.json`.
-
 ---
 
 ## Mock Assets Required
@@ -83,7 +78,7 @@ Output folder: `scripts/mock_docs/`
 
 ## Step-by-Step Script & Narration
 
-### Section 0: Introduction & Core Design Principle (0:00 – 1:00)
+### Section 0: Introduction & Core Design Thesis (0:00 – 1:00)
 
 **Screen Setup**: Open browser to `https://claims-ui-968299856642.asia-south1.run.app` (or `http://localhost:3000`).
 
@@ -94,9 +89,10 @@ Output folder: `scripts/mock_docs/`
 > 
 > Our guiding design thesis is **'LLMs for perception, deterministic code for judgment'**.
 > 
-> We leverage Google Gemini 3.6 Flash for multi-modal vision OCR and clinical tagging. However, all claim adjudication—including waiting periods, exclusions, sub-limit caps, co-pays, and fraud velocity rules—is executed by deterministic Python code that reads directly from `policy_terms.json`.
+> **Why did we implement it this way?** 
+> LLMs excel at un-structured perception—reading handwritten prescriptions, blurry bills, and mapping medical terms. However, LLMs are unreliable for financial calculations and strict constraint validation. If an LLM directly decided payouts or co-pays, it could hallucinate numbers or make floating-point errors.
 > 
-> Let's look at the live application and walk through the three core beats."
+> By restricting Gemini 3.6 Flash strictly to perception tasks (`DocumentPerceptionAgent`, `ClinicalAgent`, `ConsistencyAgent`) and leaving all money math, waiting periods, sub-limits, and fraud rules to pure Python code reading directly from `policy_terms.json`, we eliminate financial hallucinations entirely."
 
 ---
 
@@ -121,19 +117,20 @@ Output folder: `scripts/mock_docs/`
   `[MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'prescription_rajesh.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.`
 
 **Spoken Transcript**:
-> "First, let's demonstrate early document verification. Under our loaded policy terms, a `CONSULTATION` claim requires both a Doctor's Prescription AND a Hospital Bill. Here, I'm uploading two prescriptions instead of a hospital bill.
+> "First, let's look at early document verification. Under our loaded policy terms, a `CONSULTATION` claim requires both a Doctor's Prescription AND a Hospital Bill. Here, I'm uploading two prescriptions instead of a hospital bill.
 > 
-> Watch what happens when I submit:
+> Watch what happens when I click Submit:
 > 1. The pipeline halts immediately at the `verify_document_set` gate node before running any policy rules or financial math.
 > 2. The status is **`DOCUMENT_REJECTED`**, and no claim decision is generated.
 > 3. Crucially, the error message is specific and actionable:
 >    `[MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'prescription_rajesh.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.`
 > 
-> The member is told exactly what was found, what is missing, and what to upload next."
+> **Why did we implement this gate?**
+> First, it saves compute and LLM token costs by stopping invalid claims before running heavy clinical agents or rule engines. Second, it dramatically improves member experience by giving clear, actionable feedback instantly rather than making them wait for a generic rejection."
 
 ---
 
-### Section 2: Beat B — End-to-End Clean Approval & Full Audit Trace (3:00 – 7:30)
+### Section 2: Beat B — End-to-End Clean Approval & Audit Trace (3:00 – 7:30)
 
 **Goal**: Demonstrate Requirements #3–#5 — multi-modal extraction, parallel agent execution, policy adjudication, and a complete explainable audit trace.
 
@@ -165,22 +162,25 @@ Output folder: `scripts/mock_docs/`
 **Spoken Transcript**:
 > "Now let's submit a complete consultation claim with `prescription_rajesh.jpg` and `bill_rajesh.jpg`.
 > 
-> As the NDJSON stream progresses:
-> * `document_worker` uses LangGraph `Send` to process each document in parallel.
+> As the NDJSON stream progresses, notice our graph execution design:
+> * `document_worker` uses LangGraph `Send` to process each upload in parallel.
 > * Gemini 3.6 Flash Vision extracts the doctor's registration (`KA/45678/2015`), diagnosis (`Viral Fever`), and itemized bill lines (`Consultation Fee ₹1,000`, `CBC ₹300`, `Dengue NS1 ₹200`).
-> * Next, `ClinicalAgent` and `ConsistencyAgent` run simultaneously in a **parallel super-step**, reducing total pipeline latency by 35%.
-> * `ClinicalAgent` tags clinical entities against `policy_terms.json`, while `ConsistencyAgent` verifies that patient name 'Rajesh Kumar' matches across documents and roster.
-> * `AdjudicationEngine` evaluates policy rules: member validity, initial waiting period, exclusions, sub-limits, and applies the 10% co-pay.
+> * Next, `ClinicalAgent` and `ConsistencyAgent` execute simultaneously in a **parallel super-step**.
+> 
+> **Why parallel super-steps?** Both agents depend only on the extracted document state. Executing them concurrently reduces end-to-end claim latency by **35%+**.
+> 
+> * `AdjudicationEngine` evaluates policy rules: member validity, 30-day initial waiting period, exclusions, sub-limits, and applies the 10% co-pay.
 > 
 > Out of ₹1,500 claimed, the approved payout is **₹1,350** with a confidence score of **0.98**.
 > 
-> Let's scroll through the **Processing Trace** table below. Every step is an auditable event:
+> **Why do we output a Full Audit Trace?**
+> Health insurance operations require complete transparency. In the processing trace table below, an operations manager can inspect every single step:
 > 1. Document classification & extraction quality.
 > 2. Rule checks evaluated (`MEMBER_NOT_FOUND`, `WAITING_PERIOD`, `EXCLUDED_CONDITION` — all PASS).
 > 3. Financial adjustments (`COPAY: ₹1,500 -> ₹1,350`).
-> 4. Fraud checks (0 fraud score).
+> 4. Fraud velocity checks (0 fraud score).
 > 
-> An operations reviewer can reconstruct every rupee of this decision directly from the trace."
+> An operations reviewer can reconstruct every rupee of this decision directly from the trace—zero black box."
 
 ---
 
@@ -203,17 +203,19 @@ Output folder: `scripts/mock_docs/`
 **Spoken Transcript**:
 > "One technical decision I am genuinely proud of is our **Resilience & Graceful Degradation Architecture**.
 > 
-> In real production, LLM services or external tools can experience transient errors or timeouts. A pipeline crash or 500 internal server error is unacceptable for claims operations.
+> **Why did we build this?**
+> In production, external LLM services or network calls can time out or fail. A pipeline crash or HTTP 500 error is unacceptable in claims processing.
 > 
 > Every graph node is protected by native LangGraph `RetryPolicy` and wrapped in `run_resilient()`. When I check 'Simulate a component failure', `ConsistencyAgent` raises a simulated exception mid-flight.
 > 
-> Look at how the system handles it:
+> Notice how the system handles it:
 > 1. The pipeline **does not crash**—it completes and produces a valid adjudication response.
 > 2. The output flags `degraded: true`.
 > 3. The confidence score drops from **0.98 down to 0.73**, mathematically reflecting the component failure.
 > 4. An advisory note is generated recommending manual review before payout.
 > 
-> Confidence is derived from observable extraction quality and component failures—never an LLM grading its own work."
+> **Why mathematical confidence scoring?**
+> We derive confidence from observable factors—extraction quality, missing total amounts, and component failure penalties—rather than an LLM grading its own work (which is notoriously overconfident)."
 
 #### Part 2: What I Would Change Given More Time
 
