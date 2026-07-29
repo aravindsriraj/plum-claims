@@ -22,6 +22,7 @@ from app.llm.prompts import (
     NAME_RECONCILIATION_PROMPT,
     PROVIDER_RECONCILIATION_PROMPT,
 )
+from app.agents.tool_safety import run_missing_required_tools
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.textnorm import normalize
@@ -325,17 +326,6 @@ def _apply_name_warnings(store: dict[str, Any], member_name: str, warnings: list
             warnings.append(msg)
 
 
-def _run_missing_tools(tools: list, called: set[str], trace: TraceRecorder) -> None:
-    by_name = {t.name: t for t in tools}
-    for name in REQUIRED_TOOLS:
-        if name in called:
-            continue
-        trace.warn(COMPONENT, f"Agent skipped {name} — running deterministically.")
-        tool_fn = by_name[name]
-        # StructuredTool: invoke with empty args
-        tool_fn.invoke({})
-
-
 def run_consistency_agent(
     claim: ClaimInput,
     member_name: str,
@@ -401,7 +391,7 @@ def run_consistency_agent(
         },
     )
 
-    _run_missing_tools(tools, store["tools_called"], trace)
+    run_missing_required_tools(REQUIRED_TOOLS, store["tools_called"], tools, trace, COMPONENT)
     # If names mismatched and agent never reconciled, try reconcile once per name.
     for doc_name in list(store.get("mismatched_names") or []):
         if doc_name not in (store.get("reconciled_names") or set()):

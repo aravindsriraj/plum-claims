@@ -11,7 +11,7 @@ modes deliberately:
 """
 
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -104,3 +104,12 @@ class ClaimInput(BaseModel):
         if self.submission_date and self.treatment_date > self.submission_date:
             raise ValueError("treatment_date cannot be after submission_date")
         return self
+
+
+class ResumeClaimRequest(BaseModel):
+    """Claim resume (HITL) request body."""
+
+    action: Literal["approve", "reject"] = Field(
+        ..., description="Ops action for a claim paused at MANUAL_REVIEW"
+    )
+    note: str | None = Field(default=None, description="Optional ops note for the audit trail")

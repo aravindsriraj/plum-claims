@@ -11,8 +11,8 @@ from typing import Any
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from app.agents.explanation import build_explanation
-from app.agents.member_message import polish_member_message
+from app.judgment.explanation import build_explanation
+from app.judgment.member_message import polish_member_message
 from app.contracts.enums import ClaimStatus, Decision
 from app.contracts.inputs import ClaimInput
 from app.contracts.responses import ClaimResponse, ProcessingMeta

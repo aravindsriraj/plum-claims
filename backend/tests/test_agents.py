@@ -11,9 +11,9 @@ from datetime import date
 import pytest
 
 from app.agents.consistency_agent import cross_validate
-from app.agents.decision import synthesize
-from app.agents.document_verification import verify_documents
-from app.agents.extraction import extract_documents
+from app.judgment.decision import synthesize
+from app.judgment.document_verification import verify_documents
+from app.judgment.extraction import extract_documents
 from app.contracts.decision import AdjudicationResult, FraudAssessment, FraudSignal
 from app.contracts.enums import (
     ClaimCategory,
@@ -128,7 +128,7 @@ class TestExtraction:
                 },
             )
         ]
-        from app.agents.document_verification import read_document
+        from app.judgment.document_verification import read_document
 
         classified = [read_document(documents[0], None, POLICY, ClaimCategory.CONSULTATION)[0]]
         [extracted] = extract_documents(documents, classified, TraceRecorder(), POLICY)
@@ -141,7 +141,7 @@ class TestExtraction:
 
     def test_metadata_only_document_gets_shell(self):
         documents = [doc("F1", actual_type=DocumentType.PRESCRIPTION, patient_name_on_doc="X")]
-        from app.agents.document_verification import read_document
+        from app.judgment.document_verification import read_document
 
         classified = [read_document(documents[0], None, POLICY, ClaimCategory.CONSULTATION)[0]]
         [extracted] = extract_documents(documents, classified, TraceRecorder(), POLICY)
@@ -153,7 +153,7 @@ class TestExtraction:
         and union-merged with the deterministic matcher."""
         import base64
 
-        from app.agents.document_verification import LlmDocumentRead, LlmExclusionTag
+        from app.judgment.document_verification import LlmDocumentRead, LlmExclusionTag
         from app.contracts.documents import ClassifiedDocument
         from app.contracts.enums import ExtractionMethod
 
@@ -357,7 +357,7 @@ class TestCrossValidation:
 # ------------------------------------------------------------------- member message
 class TestMemberMessagePolisher:
     def test_preserved_figures_returns_polished_text(self):
-        from app.agents.member_message import LlmMemberMessage, polish_member_message
+        from app.judgment.member_message import LlmMemberMessage, polish_member_message
 
         class FakeLlm:
             def structured(self, schema, prompt, **kwargs):
@@ -372,7 +372,7 @@ class TestMemberMessagePolisher:
         assert "₹1,350" in result and "₹1,500" in result
 
     def test_dropped_figure_falls_back_to_template(self):
-        from app.agents.member_message import LlmMemberMessage, polish_member_message
+        from app.judgment.member_message import LlmMemberMessage, polish_member_message
 
         class FakeLlm:
             def structured(self, schema, prompt, **kwargs):

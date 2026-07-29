@@ -160,7 +160,7 @@ Pure Python rule engine that reads `policy_terms.json` dynamically (zero hardcod
   * `HIGH_VALUE_CLAIM`: Claims crossing auto-review thresholds (₹25,000).
 * Calculates a fraud risk score $\in [0, 1]$ and triggers `MANUAL_REVIEW` when breached.
 
-#### 4. DecisionSynthesizer (`backend/app/agents/decision.py`)
+#### 4. DecisionSynthesizer (`backend/app/judgment/decision.py`)
 * Synthesizes outputs into terminal decisions (`APPROVED`, `PARTIAL`, `REJECTED`, `MANUAL_REVIEW`).
 * Calculates mathematical confidence score.
 

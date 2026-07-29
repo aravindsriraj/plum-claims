@@ -25,9 +25,9 @@ from typing_extensions import TypedDict
 
 from app.agents.clinical_agent import run_clinical_tagging_agent
 from app.agents.consistency_agent import run_consistency_agent
-from app.agents.decision import synthesize
+from app.judgment.decision import synthesize
 from app.agents.document_perception_agent import run_document_perception_agent
-from app.agents.document_verification import evaluate_document_set
+from app.judgment.document_verification import evaluate_document_set
 from app.contracts.decision import AdjudicationResult, ClaimDecision, FraudAssessment
 from app.contracts.documents import ClassifiedDocument, DocumentIssue, ExtractedDocument
 from app.contracts.enums import Decision, DocumentQuality, DocumentType, ExtractionMethod

@@ -15,7 +15,7 @@ This agent NEVER judges coverage. It reports what the document says and how
 that content maps onto the policy vocabulary — adjudication decides the rest.
 """
 
-from app.agents.document_verification import LlmDocumentRead
+from app.judgment.document_verification import LlmDocumentRead
 from app.contracts.documents import (
     ClassifiedDocument,
     DocumentTags,

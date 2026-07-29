@@ -101,5 +101,8 @@ gcloud run deploy claims-ui --image $REGION-docker.pkg.dev/$PROJECT_ID/plum/fron
 - `backend/app/graph/` — LangGraph pipeline (Send fan-out, clinical agent, HITL)
 - `backend/app/rules/` — deterministic adjudication, financial engine, fraud,
   semantic tagging (clinical text → policy vocabulary)
-- `backend/app/agents/` — LLM-facing agents + decision/explanation
+- `backend/app/agents/` — LLM-facing, tool-calling agents (document perception,
+  clinical tagging, consistency)
+- `backend/app/judgment/` — deterministic post-processing: decision synthesis,
+  document verification gate, extraction helpers, explanation, member messaging
 - `docs/` — ARCHITECTURE.md, CONTRACTS.md, EVAL_REPORT.md

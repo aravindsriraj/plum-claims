@@ -15,9 +15,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from app.contracts.inputs import ClaimInput
+from app.contracts.inputs import ClaimInput, ResumeClaimRequest
 from app.contracts.responses import ClaimResponse
-from app.contracts.resume import ResumeClaimRequest
 from app.llm.client import LlmClient
 from app.observability.langsmith import configure_langsmith
 from app.policy.loader import load_policy

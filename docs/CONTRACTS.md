@@ -34,7 +34,7 @@ Never decides coverage or money.
 
 ## 1b. Document Gate (`evaluate_document_set`)
 
-**File:** `app/agents/document_verification.py` · **Not an agent** — hard early stop
+**File:** `app/judgment/document_verification.py` · **Not an agent** — hard early stop
 
 | | |
 |---|---|
@@ -47,7 +47,7 @@ Issues: `UNREADABLE_DOCUMENT`, `MISSING_DOCUMENT`, `WRONG_DOCUMENT_TYPE`, `PATIE
 
 ## 2. Extraction helpers
 
-**File:** `app/agents/extraction.py` — used by DocumentPerceptionAgent `finalize_extraction` tool (and eval path). Shapes vision/simulation reads into `ExtractedDocument` + deterministic/LLM tag merge. Never assesses coverage.
+**File:** `app/judgment/extraction.py` — used by DocumentPerceptionAgent `finalize_extraction` tool (and eval path). Shapes vision/simulation reads into `ExtractedDocument` + deterministic/LLM tag merge. Never assesses coverage.
 
 ---
 
@@ -164,7 +164,7 @@ claims that triggered them.
 
 ## 6. DecisionSynthesizer
 
-**File:** `app/agents/decision.py` · **Resilient:** no (deterministic)
+**File:** `app/judgment/decision.py` · **Resilient:** no (deterministic)
 
 | | |
 |---|---|
@@ -207,7 +207,7 @@ Guarantee: the pipeline never propagates a component exception to the API.
 
 ## 9. ExplanationBuilder & MemberMessagePolisher
 
-**Files:** `app/agents/explanation.py`, `app/agents/member_message.py`
+**Files:** `app/judgment/explanation.py`, `app/judgment/member_message.py`
 
 Post-graph assembly in `ClaimService` — not LangGraph nodes.
 

@@ -15,8 +15,9 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from app.agents.document_verification import LlmDocumentRead, read_document
-from app.agents.extraction import extract_one_document
+from app.agents.tool_safety import run_missing_required_tools
+from app.judgment.document_verification import LlmDocumentRead, read_document
+from app.judgment.extraction import extract_one_document
 from app.contracts.documents import ClassifiedDocument, ExtractedDocument
 from app.contracts.enums import DocumentQuality, DocumentType, ExtractionMethod
 from app.contracts.inputs import ClaimInput, DocumentInput
@@ -208,11 +209,14 @@ def run_document_perception_agent(
         trace.warn(COMPONENT, "Agent did not read the document — falling back to deterministic path.")
         return _deterministic_perceive(doc, claim, policy, llm, trace)
 
-    if store["extracted"] is None:
-        trace.warn(COMPONENT, "Agent skipped finalize_extraction — finalizing in code.")
-        store["extracted"] = extract_one_document(
-            doc, store["classified"], policy, trace, llm_read=store["llm_read"]
-        )
+    # classified is guaranteed set here (early return above) — safe to finalize.
+    run_missing_required_tools(
+        ("finalize_extraction", "validate_extraction"),
+        store["tools_called"],
+        [vision_read_document, apply_simulation_metadata, finalize_extraction, validate_extraction],
+        trace,
+        COMPONENT,
+    )
 
     classified: ClassifiedDocument = store["classified"]
     trace.record(
