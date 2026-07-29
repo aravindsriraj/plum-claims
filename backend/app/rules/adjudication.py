@@ -16,10 +16,13 @@ Rule order:
  10. Financial computation    — sub-limit -> network discount -> co-pay
 """
 
+from __future__ import annotations
+
 from app.contracts.decision import AdjudicationResult, RuleCheck
 from app.contracts.documents import DocumentTags, ExtractedDocument, LineItem, PolicyTag
 from app.contracts.enums import ClaimCategory, LineItemStatus
 from app.contracts.inputs import ClaimInput
+from app.llm.client import LlmClient
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.financial import (
