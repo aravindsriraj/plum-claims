@@ -3,10 +3,10 @@ import type { StageEvent, StageStatus } from "@/lib/types";
 // The pipeline's stages in graph order — labels mirror the backend's STAGES.
 // document_worker may run once per upload; the checklist shows it once.
 const STAGE_ORDER: { id: string; label: string }[] = [
-  { id: "document_worker", label: "Reading documents" },
+  { id: "document_worker", label: "Document perception" },
   { id: "verify_document_set", label: "Verifying document set" },
   { id: "clinical_tagging", label: "Clinical policy tagging" },
-  { id: "cross_validate", label: "Cross-checking details" },
+  { id: "cross_validate", label: "Consistency checks" },
   { id: "adjudicate", label: "Applying policy rules" },
   { id: "fraud_check", label: "Fraud screening" },
   { id: "synthesize_decision", label: "Finalizing decision" },

@@ -192,6 +192,7 @@ def run_clinical_tagging_agent(
             "run_name": "clinical_tagging_agent",
             "tags": ["clinical", "agent"],
             "metadata": {"document_count": len(docs)},
+            "recursion_limit": 16,
         },
     )
     structured = raw.get("structured_response")

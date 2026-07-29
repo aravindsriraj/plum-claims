@@ -4,69 +4,71 @@
 
 | Kind of work | Owner |
 |---|---|
-| **Perception** — document vision, name reconciliation, clinical tagging | Gemini 3.6 Flash + tool-calling agent |
-| **Judgment** — waiting periods, co-pays, limits, decision precedence | Deterministic Python from `policy_terms.json` |
+| **Perception** — documents, clinical tags, soft consistency | Three tool-calling agents (Gemini) |
+| **Control** — order, early stop, HITL, fan-out | LangGraph Claims Orchestrator |
+| **Judgment** — waiting periods, co-pays, limits, decision | Deterministic Python from `policy_terms.json` |
 
-## LangGraph multi-agent pipeline
+## Multi-agent architecture
 
 ```
-START ──Send──▶ document_worker × N   ← parallel read + extract
-      │
-verify_document_set ──issues?──▶ END (DOCUMENT_REJECTED)
-      │
-clinical_tagging     ← create_agent + policy tools (LLM only; skipped in evals)
-      │
-cross_validate       ← soft checks + fault injection (TC011)
-      │
-adjudicate           ← deterministic rules engine
-      │
-fraud_check
-      │
-synthesize_decision
-      │
-human_review_gate    ← interrupt() when MANUAL_REVIEW and CLAIMS_HITL=true
-      │
-     END
+                 Claims Orchestrator (LangGraph)
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+ DocumentPerceptionAgent  ClinicalAgent     ConsistencyAgent
+ (tool-calling, ×N Send)  (tool-calling)    (tool-calling)
+         │                    │                    │
+         └─────────┬──────────┴────────────────────┘
+                   ▼
+         Document Gate (rules) ── fail → DOCUMENT_REJECTED
+                   │ pass
+                   ▼
+         Policy Adjudicator → Fraud → Synthesizer → HITL?
 ```
 
-### What each agentic piece does
+### The three real agents
 
-1. **Parallel document workers (`Send`)** — One worker per upload. Vision read + extraction run concurrently. Results merge via list/dict reducers. TraceRecorder is lock-guarded.
-2. **ClinicalTaggingAgent (`langchain.agents.create_agent`)** — Real tool-calling agent with:
-   - `lookup_policy_exclusion`
-   - `check_condition_waiting_period`
-   - `verify_high_value_test`
-   - `list_waiting_condition_keys`  
-   Output is structured tags, whitelist-validated, union-merged into document tags. **Never decides money.** Skipped when no LLM (evals use deterministic tags only).
-3. **Human-in-the-loop** — When `CLAIMS_HITL=true` and the decision is `MANUAL_REVIEW`, `interrupt()` pauses the graph. Ops resumes via `POST /claims/{id}/resume` with `approve` or `reject`. Checkpointer: `MemorySaver` (demo); production would use `PostgresSaver`. Evals keep `CLAIMS_HITL=false` so TC009 still returns `MANUAL_REVIEW` as a finished decision.
+1. **DocumentPerceptionAgent** (`create_agent`) — per upload, parallel via `Send`  
+   Tools: `vision_read_document` (≤1×), `apply_simulation_metadata`, `finalize_extraction`, `validate_extraction`  
+   No LLM → deterministic read/extract (evals).
 
-### Runtime registry
+2. **ClinicalAgent** (`create_agent`) — maps clinical text → policy tags  
+   Tools: exclusion / waiting-period / high-value-test lookups  
+   Output whitelist-validated; **never decides money**. Skipped without LLM.
 
-`policy`, `llm`, and `TraceRecorder` are **not** stored in checkpointed graph state (they are not JSON-serializable). They live in `app.graph.runtime` keyed by `claim_id` (= LangGraph `thread_id`).
+3. **ConsistencyAgent** (`create_agent`) — soft cross-checks  
+   Tools: names, dates, amounts, provider, prescription, clinical consistency (+ optional name LLM)  
+   Required tools skipped by the model are **re-run in code**. Warnings only.
 
-## Semantic tagging
+### What is not an agent (on purpose)
 
-Clinical free text → tags (conditions, exclusions) via:
+| Piece | Role |
+|---|---|
+| **Document Gate** | Hard early stop with actionable member messages |
+| **Policy Adjudicator** | Deterministic rules / amounts from `policy_terms.json` |
+| **Fraud / Synthesizer** | Signals + decision precedence |
+| **Orchestrator** | Enforces pipeline, parallel fan-out, HITL |
 
-1. Deterministic alias matcher (`policy_terms.json`) — eval / fallback path  
-2. Vision LLM tags (single read) and/or ClinicalTaggingAgent — live path  
-Union-merge; disagreements become trace warnings. Adjudication consumes tags only.
+### Considered and rejected
+
+- **Single ReAct agent that approves payouts** — fails explainability, evals, and early document stop.  
+- **Deep Agents / todo supervisors** — overkill latency/complexity for one claim.  
+- **Multiple vision tool hops per file** — burns Gemini calls; one `vision_read_document` max.
+
+## Runtime registry
+
+`policy`, `llm`, `TraceRecorder`, and upload bytes live in `app.graph.runtime` (not checkpointed graph state).
 
 ## Observability
 
-LangSmith project `plum-claims`. Each claim is one parent run (`ProcessClaim` for
-sync/stream, `ResumeClaim` for HITL) with nested `ClaimsGraph` → node spans,
-`GeminiStructured` LLM calls, `clinical_tagging_agent` tool loops, and
-`MemberMessagePolish`. Upload bytes stay in the runtime registry (not graph
-state) so spans stay small. Parent outputs summarize the decision — stream
-stage events are not dumped into the root run.
+LangSmith `plum-claims`: `ProcessClaim` → `ClaimsGraph` → nodes → agent/tool/`GeminiStructured` spans.
 
-## Streaming
+## Streaming & HITL
 
-`POST /claims/stream` emits NDJSON: `stage` events, optional `interrupt`, then `result`.
+`POST /claims/stream` NDJSON stages. `CLAIMS_HITL=true` + `MANUAL_REVIEW` → `interrupt()`; resume via API/UI.
 
-## Scaling notes
+## Scale (10×)
 
-- Parallel document fan-out already uses `Send`.
-- Swap `MemorySaver` → `PostgresSaver` for durable HITL across replicas.
-- Add reflection retry edge on low extraction confidence when needed.
+- Doc agents already parallel (`Send`).  
+- Swap `MemorySaver` → `PostgresSaver` for multi-replica HITL.  
+- Add specialists behind the orchestrator without touching adjudication.

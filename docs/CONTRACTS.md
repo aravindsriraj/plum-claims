@@ -14,87 +14,58 @@ Conventions:
 
 ---
 
-## 1. DocumentVerificationAgent
+## 1. DocumentPerceptionAgent (tool-calling)
 
-**File:** `app/agents/document_verification.py` · **Resilient:** yes (fallback → synthetic UNREADABLE issue)
+**File:** `app/agents/document_perception_agent.py` · **Resilient:** yes (fallback → UNREADABLE shell)
 
 | | |
 |---|---|
-| **Input** | `category: ClaimCategory`; `member_name: str`; `documents: list[DocumentInput]`; `policy: Policy`; `llm: LlmClient \| None` |
-| **Output** | `(classified: list[ClassifiedDocument], issues: list[DocumentIssue], reads: dict[str, LlmDocumentRead])` — one `ClassifiedDocument` per input document, in order; `reads` carries the raw vision read per file_id for the ExtractionAgent (empty in simulation mode) |
-| **Raises** | `RuntimeError` if a document needs a vision read but no LLM client is configured |
+| **Input** | `doc: DocumentInput`; `claim: ClaimInput`; `policy: Policy`; `trace`; `llm: LlmClient \| None` |
+| **Output** | `(ClassifiedDocument, ExtractedDocument \| None)` |
+| **Raises** | Vision path may raise if LLM fails (caught by `run_resilient`) |
 
-Behavior contract:
+**Tools (when chat model present):** `vision_read_document` (≤1×), `apply_simulation_metadata`, `finalize_extraction`, `validate_extraction`.
 
-1. Each real upload is read ONCE by the vision model via a single structured
-   output (`LlmDocumentRead`): classification (`doc_type`, `quality`,
-   `classification_confidence`), extraction fields, and policy-vocabulary
-   tags (`matched_conditions`, `matched_exclusions`). Simulation metadata →
-   used directly, no LLM call.
-2. Emits a `DocumentIssue` for each of:
-   - `UNREADABLE_DOCUMENT` — quality UNREADABLE; message names the file and
-     asks for a re-upload of that specific document; never rejects the claim.
-   - `MISSING_DOCUMENT` — a type in policy `document_requirements[category].required`
-     is absent; message names what was uploaded and what is required.
-   - `WRONG_DOCUMENT_TYPE` — uploaded type not in required ∪ optional, or a
-     surplus duplicate of an accepted type; message names found vs expected.
-   - `PATIENT_MISMATCH` — documents name >1 distinct patient, or a single
-     patient different from the claiming member; message names the names found.
-3. Non-empty `issues` ⇒ the pipeline MUST stop before any claim decision
-   (`status: DOCUMENT_REJECTED`).
-4. Side effects: one trace event per classified document + one per issue.
+**No chat model (evals):** deterministic `read_document` + `extract_one_document` (no planner loop).
+
+Never decides coverage or money.
 
 ---
 
-## 2. ExtractionAgent
+## 1b. Document Gate (`evaluate_document_set`)
 
-**File:** `app/agents/extraction.py` · **Resilient:** yes, per document (fallback → document excluded)
+**File:** `app/agents/document_verification.py` · **Not an agent** — hard early stop
 
 | | |
 |---|---|
-| **Input** | `documents: list[DocumentInput]`; `classified: list[ClassifiedDocument]`; `policy: Policy`; `llm_reads: dict[str, LlmDocumentRead] \| None` |
-| **Output** | `list[ExtractedDocument]` (may be shorter than input if documents failed) |
-| **Raises** | `RuntimeError` if a vision-mode document has no stashed read (verification reads every upload exactly once) |
+| **Input** | `category`, `member_name`, `classified[]`, `policy`, `trace` |
+| **Output** | `list[DocumentIssue]` — non-empty ⇒ `DOCUMENT_REJECTED` |
 
-Behavior contract:
-
-1. Mode selection per document: `file_content_base64` present → shape the
-   stashed vision read (no second LLM call); `content` present →
-   provided-content normalization; otherwise metadata-only shell with
-   `overall_confidence = 0.5`.
-2. Output fields mirror the source document: `patient_name`, `doctor_name`,
-   `doctor_registration`, `provider_name`, `document_date`, `diagnosis`,
-   `treatment`, `medicines[]`, `tests_ordered[]`, `line_items[]`,
-   `total_amount`, `overall_confidence`, `unreadable_fields[]`.
-3. Every document is tagged (`ExtractedDocument.tags`): clinical text mapped
-   onto the policy vocabulary. Provided-content mode → deterministic matcher.
-   Vision mode → LLM tags whitelist-validated against the policy (hallucinated
-   entries dropped + warned) then union-merged with the deterministic matcher;
-   disagreements become trace warnings.
-4. Never invents values: illegible fields are null + listed in
-   `unreadable_fields`, and `overall_confidence` drops proportionally.
-5. Never assesses coverage, exclusions, or limits — it only TAGS.
-6. Content-key convention: `provider_name` is canonical; `hospital_name` is
-   accepted as a deprecated alias.
+Issues: `UNREADABLE_DOCUMENT`, `MISSING_DOCUMENT`, `WRONG_DOCUMENT_TYPE`, `PATIENT_MISMATCH` — messages must name what was found and what to do next.
 
 ---
 
-## 3. CrossValidationAgent
+## 2. Extraction helpers
 
-**File:** `app/agents/cross_validation.py` · **Resilient:** yes (fallback → skip + warning) · **Fault-injection point**
+**File:** `app/agents/extraction.py` — used by DocumentPerceptionAgent `finalize_extraction` tool (and eval path). Shapes vision/simulation reads into `ExtractedDocument` + deterministic/LLM tag merge. Never assesses coverage.
+
+---
+
+## 3. ConsistencyAgent (tool-calling)
+
+**File:** `app/agents/consistency_agent.py` · **Resilient:** yes · **Fault-injection point**
 
 | | |
 |---|---|
-| **Input** | `claim: ClaimInput`; `member_name: str`; `docs: list[ExtractedDocument]`; `policy: Policy`; `llm: LlmClient \| None` |
-| **Output** | `list[str]` — human-readable warnings (empty = all consistent) |
-| **Raises** | nothing for data problems; `RuntimeError` when `claim.simulate_component_failure` is true (by design) |
+| **Input** | `claim`, `member_name`, `docs[]`, `policy`, `trace`, `llm` |
+| **Output** | `list[str]` soft warnings |
+| **Raises** | `RuntimeError` when `simulate_component_failure` (by design, in the graph node) |
 
-Checks (warnings only, never hard-stops): patient name vs roster name (with LLM
-second opinion via `LlmNameVerdict` when names differ, clearing false
-mismatches like "R. Kumar" vs "Rajesh Kumar"); document dates within 3 days of
-treatment date; claimed amount vs sum of bill totals; provider form vs docs;
-prescription presence when category requires one; LLM medical necessity & clinical
-consistency evaluation (`LlmClinicalVerdict`).
+**Tools:** `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `check_prescription_requirement`, `check_clinical_consistency`.
+
+Required tools skipped by the planner are re-run in code. Warnings only — never hard-stop.
+
+Wrapper: `cross_validate()` in `cross_validation.py` delegates here.
 
 ---
 

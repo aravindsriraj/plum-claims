@@ -415,7 +415,7 @@ class TestDecisionSynthesis:
             confidence=0.73,
             failures=[
                 ComponentFailure(
-                    component="CrossValidationAgent",
+                    component="ConsistencyAgent",
                     error="RuntimeError: simulated",
                     fallback_used="skipped",
                     confidence_penalty=0.25,

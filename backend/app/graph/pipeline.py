@@ -1,14 +1,17 @@
-"""The claims pipeline as a LangGraph StateGraph.
+"""The claims pipeline as a LangGraph Claims Orchestrator.
 
-    START ──Send──▶ document_worker × N (parallel read + extract)
+    START ──Send──▶ document_worker × N   ← DocumentPerceptionAgent (tool-calling)
                         │
-              verify_document_set ──issues?──▶ END
+              verify_document_set ──issues?──▶ END (DOCUMENT_REJECTED)
                         │
-              clinical_tagging → cross_validate → adjudicate
-                        → fraud_check → synthesize → human_review_gate → END
+              clinical_tagging     ← ClinicalAgent (tool-calling)
+                        │
+              cross_validate       ← ConsistencyAgent (tool-calling)
+                        │
+              adjudicate → fraud_check → synthesize → human_review_gate → END
 
-Non-serializable objects (policy, llm, trace) live in app.graph.runtime,
-keyed by claim_id — required for checkpointer-backed HITL.
+Non-serializable objects (policy, llm, trace, upload bytes) live in
+app.graph.runtime, keyed by claim_id — required for checkpointer-backed HITL.
 """
 
 from __future__ import annotations
@@ -21,10 +24,10 @@ from langgraph.types import Send, interrupt
 from typing_extensions import TypedDict
 
 from app.agents.clinical_agent import run_clinical_tagging_agent
-from app.agents.cross_validation import cross_validate
+from app.agents.consistency_agent import run_consistency_agent
 from app.agents.decision import synthesize
-from app.agents.document_verification import evaluate_document_set, read_document
-from app.agents.extraction import extract_one_document
+from app.agents.document_perception_agent import run_document_perception_agent
+from app.agents.document_verification import evaluate_document_set
 from app.contracts.decision import AdjudicationResult, ClaimDecision, FraudAssessment
 from app.contracts.documents import ClassifiedDocument, DocumentIssue, ExtractedDocument
 from app.contracts.enums import Decision, DocumentQuality, DocumentType, ExtractionMethod
@@ -84,16 +87,16 @@ def fan_out_documents(state: ClaimGraphState) -> list[Send]:
 
 
 def document_worker_node(state: ClaimGraphState) -> dict:
-    """Worker: read + extract one document."""
+    """Worker: DocumentPerceptionAgent (tool-calling) for one upload."""
     claim = state["claim"]
     rt = get_runtime(state["claim_id"])
     doc = rt.hydrate_document(state["document"])
 
-    def read():
-        return read_document(doc, rt.llm, rt.policy, claim.claim_category)
+    def perceive():
+        return run_document_perception_agent(doc, claim, rt.policy, rt.trace, llm=rt.llm)
 
-    def read_fallback():
-        return ClassifiedDocument(
+    def perceive_fallback():
+        classified = ClassifiedDocument(
             file_id=doc.file_id,
             file_name=doc.file_name,
             detected_type=doc.actual_type or DocumentType.UNKNOWN,
@@ -101,33 +104,17 @@ def document_worker_node(state: ClaimGraphState) -> dict:
             quality=DocumentQuality.UNREADABLE,
             patient_name_on_doc=doc.patient_name_on_doc,
             method=ExtractionMethod.METADATA,
-        ), None
+        )
+        return classified, None
 
-    classified, read = run_resilient(
-        "DocumentVerificationAgent",
-        read,
-        read_fallback,
+    classified, extracted = run_resilient(
+        "DocumentPerceptionAgent",
+        perceive,
+        perceive_fallback,
         rt.trace,
-        fallback_description=f"document {doc.file_id} marked unreadable after read failure",
+        fallback_description=f"document {doc.file_id} marked unreadable after perception failure",
     )
-    rt.trace.record(
-        "DocumentVerificationAgent",
-        "EXTRACTION",
-        "PASS",
-        f"{doc.file_name or doc.file_id}: read as {classified.detected_type.value} "
-        f"(quality {classified.quality.value}, confidence {classified.detection_confidence:.2f}, "
-        f"via {classified.method.value}).",
-        classified.model_dump(mode="json"),
-    )
-
     updates: dict[str, Any] = {"classified_documents": [classified]}
-    extracted = run_resilient(
-        "ExtractionAgent",
-        lambda: extract_one_document(doc, classified, rt.policy, rt.trace, llm_read=read),
-        lambda: None,
-        rt.trace,
-        fallback_description=f"document {doc.file_id} excluded from processing",
-    )
     if extracted is not None:
         updates["extracted_documents"] = [extracted]
     return updates
@@ -164,12 +151,12 @@ def cross_validate_node(state: ClaimGraphState) -> dict:
     def run():
         if state["claim"].simulate_component_failure:
             raise RuntimeError("Simulated component failure (fault injection)")
-        return cross_validate(
+        return run_consistency_agent(
             state["claim"], state["member_name"], _docs(state), rt.policy, rt.trace, llm=rt.llm
         )
 
     warnings = run_resilient(
-        "CrossValidationAgent",
+        "ConsistencyAgent",
         run,
         lambda: ["Cross-validation was skipped after a component failure."],
         rt.trace,

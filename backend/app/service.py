@@ -31,10 +31,10 @@ from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 
 STAGES: list[tuple[str, str]] = [
-    ("document_worker", "Reading documents"),
+    ("document_worker", "Document perception"),
     ("verify_document_set", "Verifying document set"),
     ("clinical_tagging", "Clinical policy tagging"),
-    ("cross_validate", "Cross-checking details"),
+    ("cross_validate", "Consistency checks"),
     ("adjudicate", "Applying policy rules"),
     ("fraud_check", "Fraud screening"),
     ("synthesize_decision", "Finalizing decision"),
