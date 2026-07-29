@@ -6,10 +6,10 @@ APPROVED / PARTIAL / REJECTED / MANUAL_REVIEW against a JSON-defined policy —
 with a complete audit trace for every decision.
 
 **Design principle: LLMs for perception, code for judgment.** Gemini 3.6 Flash
-reads documents; a LangGraph `Send` fan-out processes uploads in parallel; a
-real `create_agent` clinical tagger enriches policy tags; deterministic Python
-applies policy arithmetic. Optional HITL (`CLAIMS_HITL`) pauses on
-`MANUAL_REVIEW`. See `docs/ARCHITECTURE.md`.
+reads documents; a LangGraph `Send` fan-out processes uploads in parallel;
+`ClinicalAgent` and `ConsistencyAgent` execute in a parallel super-step; deterministic
+Python applies policy arithmetic. All LLM nodes are attached with LangGraph
+`RetryPolicy`. Optional HITL (`CLAIMS_HITL`) pauses on `MANUAL_REVIEW`. See `docs/ARCHITECTURE.md`.
 
 ## Observability & Tracing
 
@@ -71,8 +71,8 @@ cd backend
 .venv/bin/python -m evals.run_evals      # 12 assignment test cases -> docs/EVAL_REPORT.md
 ```
 
-Current status: **59/59 unit tests, 12/12 eval cases** (see
-`docs/EVAL_REPORT.md`, regenerated on every run).
+Current status: **64/64 unit tests, 12/12 eval cases** (see
+`docs/EVAL_REPORT.md`, regenerated with Gemini LLM active).
 
 ## Deploy (Cloud Run)
 

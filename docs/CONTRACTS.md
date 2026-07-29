@@ -65,7 +65,7 @@ Issues: `UNREADABLE_DOCUMENT`, `MISSING_DOCUMENT`, `WRONG_DOCUMENT_TYPE`, `PATIE
 
 Required tools skipped by the planner are re-run in code. Warnings only — never hard-stop.
 
-Wrapper: `cross_validate()` in `cross_validation.py` delegates here.
+Wrapper: `cross_validate()` in `consistency_agent.py` (alias for `run_consistency_agent`).
 
 ---
 
