@@ -93,9 +93,11 @@ Output folder: `scripts/mock_docs/`
 
 ## Step-by-Step Script & Narration
 
-### Section 0: Introduction & Core Design Thesis (0:00 – 1:00)
+### Section 0: Introduction, Core Thesis & Architecture Walkthrough (0:00 – 1:30)
 
-**Screen Setup**: Open browser to `https://claims-ui-968299856642.asia-south1.run.app` (or `http://localhost:3000`).
+**Screen Setup**: 
+1. Show browser tab open to `https://claims-ui-968299856642.asia-south1.run.app` (or local UI).
+2. Switch tab/view to show the **Architecture Diagram** (`docs/ARCHITECTURE.md` or slide).
 
 **Spoken Transcript**:
 > "Hi everyone, welcome to the demo of Plum's AI-powered Health Insurance Claims Processing System.
@@ -105,9 +107,21 @@ Output folder: `scripts/mock_docs/`
 > Our guiding design thesis is **'LLMs for perception, deterministic code for judgment'**.
 > 
 > **Why did we implement it this way?** 
-> LLMs excel at un-structured perception—reading handwritten prescriptions, blurry bills, and mapping medical terms. However, LLMs are unreliable for financial calculations and strict constraint validation. If an LLM directly decided payouts or co-pays, it could hallucinate numbers or make floating-point errors.
+> LLMs excel at unstructured perception—reading handwritten prescriptions, blurry bills, and mapping medical terms. However, LLMs are unreliable for financial calculations and strict constraint validation. If an LLM directly decided payouts or co-pays, it could hallucinate numbers or make floating-point errors.
 > 
-> By restricting Gemini 3.6 Flash strictly to perception tasks (`DocumentPerceptionAgent`, `ClinicalAgent`, `ConsistencyAgent`) and leaving all money math, waiting periods, sub-limits, and fraud rules to pure Python code reading directly from `policy_terms.json`, we eliminate financial hallucinations entirely."
+> By restricting Gemini 3.6 Flash strictly to perception tasks and leaving all money math, waiting periods, sub-limits, and fraud rules to pure Python code reading directly from `policy_terms.json`, we eliminate financial hallucinations entirely.
+> 
+> **Let me quickly walk you through our 8-node LangGraph pipeline before we run live claims:**
+> 
+> [Point to Architecture Diagram on Screen]
+> 
+> 1. **Node 1 (Read Uploaded Documents)**: Uses Gemini 3.6 Flash Vision. Uploaded files run concurrently via LangGraph's `Send` fan-out for max speed.
+> 2. **Node 2 (Document Verification Gate)**: Checks if any file is unreadable, missing, or for the wrong patient. If invalid, the claim halts early to save token costs and give instant feedback.
+> 3. **Nodes 3 & 4 (Parallel AI Super-Step)**: `ClinicalAgent` maps diagnoses to policy terms using LLM tools, while `ConsistencyAgent` reconciles patient names and hospital variants in parallel.
+> 4. **Node 5 (Policy Adjudication Engine)**: Pure Python executes the exact financial calculation chain: Sub-limits $\rightarrow$ Network Discounts $\rightarrow$ Member Co-pays.
+> 5. **Nodes 6, 7 & 8 (Fraud, Synthesis & HITL)**: Velocity screening checks fraud risk, the synthesizer computes mathematical confidence, and an optional Operations Review Gate pauses high-risk claims for human review.
+> 
+> Now, let's jump into the live application demo!"
 
 ---
 
