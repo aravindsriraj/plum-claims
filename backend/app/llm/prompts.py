@@ -81,4 +81,17 @@ Decide if the treatment, medicines, and tests are clinically consistent and stan
 - Return consistent=true if they align with standard medical practice.
 - Return consistent=false ONLY if there is an obvious clinical mismatch or anomaly. Provide a 1-sentence rationale."""
 
+PROVIDER_RECONCILIATION_PROMPT = """You are comparing two hospital/clinic provider names for an Indian health insurance claim. Decide whether they plausibly refer to the SAME healthcare provider / hospital branch.
+
+Hospital name on claim form: {form_provider}
+Hospital name on medical document: {doc_provider}
+
+Consider:
+- Branch names vs main hospital name ("Apollo Hospital, Indiranagar" vs "Apollo Hospitals")
+- Common abbreviations ("Fortis Healthcare Ltd" vs "Fortis Hospital")
+- Corporate suffix additions ("Pvt Ltd", "Clinic", "Diagnostics", "Research Centre")
+
+Return same_provider=true if they refer to the same provider entity or its branch/affiliate. Return same_provider=false if they are clearly different medical facilities."""
+
+
 

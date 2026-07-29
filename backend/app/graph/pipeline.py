@@ -167,7 +167,7 @@ def cross_validate_node(state: ClaimGraphState) -> dict:
 
 def adjudicate_node(state: ClaimGraphState) -> dict:
     rt = get_runtime(state["claim_id"])
-    return {"adjudication": adjudicate(state["claim"], rt.policy, _docs(state), rt.trace)}
+    return {"adjudication": adjudicate(state["claim"], rt.policy, _docs(state), rt.trace, llm=rt.llm)}
 
 
 def fraud_check_node(state: ClaimGraphState) -> dict:

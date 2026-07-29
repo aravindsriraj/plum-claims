@@ -76,6 +76,7 @@ def adjudicate(
     policy: Policy,
     docs: list[ExtractedDocument],
     trace: TraceRecorder,
+    llm: LlmClient | None = None,
 ) -> AdjudicationResult:
     """Run all policy rules for a claim. Every outcome is recorded in the trace."""
     result = AdjudicationResult()
@@ -220,7 +221,7 @@ def adjudicate(
     if sub_adj:
         result.adjustments.append(sub_adj)
 
-    network = is_network_hospital(provider, policy.network_hospitals)
+    network = is_network_hospital(provider, policy.network_hospitals, llm=llm)
     if network:
         trace.info(COMPONENT, f"Provider '{provider}' is a network hospital.")
     discounted, disc_adj = apply_network_discount(eligible_after_cap, network, rules)

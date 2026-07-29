@@ -17,7 +17,11 @@ from pydantic import BaseModel, Field
 from app.contracts.documents import ExtractedDocument
 from app.contracts.inputs import ClaimInput
 from app.llm.client import LlmClient
-from app.llm.prompts import CLINICAL_CONSISTENCY_PROMPT, NAME_RECONCILIATION_PROMPT
+from app.llm.prompts import (
+    CLINICAL_CONSISTENCY_PROMPT,
+    NAME_RECONCILIATION_PROMPT,
+    PROVIDER_RECONCILIATION_PROMPT,
+)
 from app.observability.trace import TraceRecorder
 from app.policy.loader import Policy
 from app.rules.textnorm import normalize
@@ -35,6 +39,7 @@ Rules:
 - Call EVERY check_* tool at least once (patient names, dates, amounts, provider,
   prescription requirement, clinical consistency).
 - Use reconcile_name_with_llm only when check_patient_names reports mismatches.
+- Use reconcile_provider_with_llm when check_provider_consistency reports potential provider name mismatches.
 - Warnings only — never approve/reject money or invent policy outcomes.
 - Be concise in tool usage; do not repeat the same check unnecessarily.
 """
@@ -53,6 +58,13 @@ class LlmNameVerdict(BaseModel):
     """Structured output for name reconciliation: are these the same person?"""
 
     same_person: bool
+    rationale: str = Field(default="")
+
+
+class LlmProviderVerdict(BaseModel):
+    """Structured output for provider reconciliation: are these the same healthcare facility?"""
+
+    same_provider: bool
     rationale: str = Field(default="")
 
 
@@ -164,22 +176,66 @@ def _build_tools(
         return f"OK: claimed amount matches ₹{billed:,.0f}."
 
     @tool
+    def reconcile_provider_with_llm(doc_provider: str) -> str:
+        """LLM second opinion: is doc_provider the same healthcare facility as claim.hospital_name?"""
+        called.add("reconcile_provider_with_llm")
+        if llm is None or not claim.hospital_name:
+            return "No LLM — cannot reconcile provider; mismatch stands."
+        verdict = llm.structured(
+            LlmProviderVerdict,
+            PROVIDER_RECONCILIATION_PROMPT.format(
+                form_provider=claim.hospital_name, doc_provider=doc_provider
+            ),
+        )
+        if verdict.same_provider:
+            store.setdefault("reconciled_providers", set()).add(doc_provider)
+            trace.check(
+                COMPONENT,
+                True,
+                f"Provider variant '{doc_provider}' reconciled with '{claim.hospital_name}' (LLM).",
+            )
+            return f"OK: '{doc_provider}' reconciled as same healthcare facility."
+        return f"NOT_SAME: '{doc_provider}' — {verdict.rationale or 'LLM does not confirm provider match'}."
+
+    @tool
     def check_provider_consistency() -> str:
-        """Compare hospital on the claim form to providers on documents."""
+        """Compare hospital on the claim form to providers on documents using AI reconciliation."""
         called.add("check_provider_consistency")
         doc_providers = [d.provider_name for d in docs if d.provider_name]
         if not (claim.hospital_name and doc_providers):
             return "OK: provider check skipped (missing form or document provider)."
         form_provider = normalize(claim.hospital_name)
-        if any(
-            form_provider in normalize(p) or normalize(p) in form_provider
-            for p in doc_providers
-        ):
+        
+        mismatched: list[str] = []
+        for p in doc_providers:
+            norm_p = normalize(p)
+            if form_provider in norm_p or norm_p in form_provider:
+                continue
+            # Use LLM reconciliation if available
+            if llm is not None:
+                verdict = llm.structured(
+                    LlmProviderVerdict,
+                    PROVIDER_RECONCILIATION_PROMPT.format(
+                        form_provider=claim.hospital_name, doc_provider=p
+                    ),
+                )
+                if verdict.same_provider:
+                    store.setdefault("reconciled_providers", set()).add(p)
+                    trace.check(
+                        COMPONENT,
+                        True,
+                        f"Provider '{p}' matched form hospital '{claim.hospital_name}' via LLM.",
+                    )
+                    continue
+            mismatched.append(p)
+
+        if not mismatched:
             return "OK: form hospital matches document provider(s)."
+
         msg = (
             f"Provider mismatch: the claim form says '{claim.hospital_name}' but "
             f"the document(s) are from "
-            + ", ".join(f"'{p}'" for p in doc_providers)
+            + ", ".join(f"'{p}'" for p in mismatched)
             + "."
         )
         warnings.append(msg)
@@ -249,6 +305,7 @@ def _build_tools(
         check_document_dates,
         check_amount_vs_bills,
         check_provider_consistency,
+        reconcile_provider_with_llm,
         check_prescription_requirement,
         check_clinical_consistency,
     ]

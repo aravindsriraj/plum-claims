@@ -13,14 +13,25 @@ auditable in the trace. The adjudication engine orchestrates the steps; this
 module owns only the arithmetic.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from app.contracts.decision import Adjustment
 from app.contracts.enums import AdjustmentKind
 from app.policy.loader import OpdCategoryRules
 from app.rules.textnorm import normalize
 
+if TYPE_CHECKING:
+    from app.llm.client import LlmClient
 
-def is_network_hospital(provider_name: str | None, network_hospitals: list[str]) -> bool:
-    """Fuzzy membership check: exact or containment either way, normalized.
+
+def is_network_hospital(
+    provider_name: str | None,
+    network_hospitals: list[str],
+    llm: LlmClient | None = None,
+) -> bool:
+    """Fuzzy membership check: exact or containment either way, normalized, with LLM fallback.
 
     'Apollo Hospitals' matches 'Apollo Hospitals, Bengaluru' and vice versa;
     'City Clinic, Bengaluru' matches nothing in the network list.
@@ -34,6 +45,27 @@ def is_network_hospital(provider_name: str | None, network_hospitals: list[str])
         name = normalize(hospital)
         if name and (name in candidate or candidate in name):
             return True
+
+    if llm is not None:
+        try:
+            from pydantic import BaseModel, Field
+            from app.llm.prompts import PROVIDER_RECONCILIATION_PROMPT
+
+            class NetworkHospitalMatch(BaseModel):
+                same_provider: bool = Field(description="True if provider matches any network hospital entity or branch")
+
+            prompt = (
+                f"Determine if the provider name '{provider_name}' matches any network hospital listed below.\n\n"
+                f"NETWORK HOSPITALS LIST:\n"
+                + "\n".join(f"- {h}" for h in network_hospitals)
+                + "\n\nReturn same_provider=true if it is a branch, affiliate, or alias of a network hospital."
+            )
+            res = llm.structured(NetworkHospitalMatch, prompt)
+            if res and res.same_provider:
+                return True
+        except Exception:
+            pass
+
     return False
 
 
