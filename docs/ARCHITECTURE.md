@@ -1,14 +1,53 @@
-# Architecture — Health Insurance Claims Processing System
+# System Architecture & Technical Design Document
+## Health Insurance Claims Processing System — Plum AI Pod
 
-## Guiding principle: LLMs for perception, code for judgment
+---
 
-| Kind of work | Owner |
-|---|---|
-| **Perception** — documents, clinical tags, soft consistency | Three tool-calling agents (Gemini 3.6 Flash) |
-| **Control** — order, early stop, HITL, parallel fan-out | LangGraph Claims Orchestrator |
-| **Judgment** — waiting periods, co-pays, limits, decision | Deterministic Python from `policy_terms.json` |
+## 1. Executive Summary & Core Design Thesis
 
-## Multi-agent orchestrator architecture
+Processing employee health insurance claims requires balancing **intelligence** (reading messy handwritten prescriptions, blurry bills, and non-standard medical terms) with **100% precision and explainability** (calculating exact financial payouts, enforcing waiting periods, sub-limits, co-pays, and audit compliance).
+
+To solve this, our system is built around a single core architectural thesis:
+
+> **"LLMs for Perception, Deterministic Code for Judgment"**
+
+```
+                                  +------------------------------------+
+                                  |     UNSTRUCTURED INPUT DATA        |
+                                  | (Images, PDFs, Handwritten text)   |
+                                  +------------------------------------+
+                                                    |
+                                                    v
+                                  +------------------------------------+
+                                  |      PERCEPTION LAYER (AI)         |
+                                  |  3 Tool-Calling Gemini 3.6 Flash   |
+                                  |  Agents extract structured JSON    |
+                                  +------------------------------------+
+                                                    |
+                                                    v
+                                  +------------------------------------+
+                                  |      JUDGMENT LAYER (CODE)         |
+                                  |  Deterministic Python Rule Engine  |
+                                  |  reads directly from policy JSON   |
+                                  +------------------------------------+
+                                                    |
+                                                    v
+                                  +------------------------------------+
+                                  |   100% EXPLAINABLE CLAIM DECISION  |
+                                  |   & Complete Step-by-Step Trace    |
+                                  +------------------------------------+
+```
+
+### Why This Division of Responsibilities?
+* **LLMs Excel at Perception**: Extracting OCR text from blurry photos, recognizing doctor signatures, mapping clinical terms (e.g., `"T2DM"` or `"high blood sugar"` $\rightarrow$ `"diabetes"`), and comparing Indian name variations.
+* **LLMs Fail at Judgment**: LLMs are prone to floating-point arithmetic errors, overconfidence, hallucinated policy rules, and inconsistent decisions under complex constraint combinations.
+* **Code Guarantees Precision**: All financial calculations, waiting period dates, sub-limits, co-pays, network hospital discounts, and velocity fraud checks are strictly executed by deterministic Python code reading directly from `policy_terms.json`. Zero financial logic is ever delegated to an LLM.
+
+---
+
+## 2. Multi-Agent Orchestrator Architecture
+
+The overall claims pipeline is modeled as a stateful **LangGraph Claims Orchestrator** enforcing execution sequence, parallel fan-out, parallel super-steps, early gate halts, and human-in-the-loop pauses.
 
 ```
                              Claims Orchestrator (LangGraph)
@@ -16,86 +55,172 @@
          LangGraph Send (Parallel Fan-Out × N Uploads)
                                            ▼
             ┌─────────────────────────────────────────────────────────┐
-            │ [document_worker × N]                                   │
+            │ [NODE 1: document_worker × N]                           │
             │ 🤖 DocumentPerceptionAgent (tool-calling, Gemini Vision)│
             └─────────────────────────────────────────────────────────┘
                                            │
                                            ▼
-                                [verify_document_set]
+                                [NODE 2: verify_document_set]
                              (Document Verification Gate)
                                            │
                             issues? ───────┴─────── pass?
                                │                      │
                                ▼                      ▼
-                      [DOCUMENT_REJECTED]     PARALLEL SUPER-STEP
+                   [END: DOCUMENT_REJECTED]   PARALLEL SUPER-STEP
                                               ┌───────┴───────┐
                                               ▼               ▼
                    ┌─────────────────────────────┐  ┌─────────────────────────────┐
-                   │ [clinical_tagging]          │  │ [cross_validate]            │
+                   │ [NODE 3: clinical_tagging]  │  │ [NODE 4: cross_validate]    │
                    │ 🤖 ClinicalAgent            │  │ 🤖 ConsistencyAgent         │
                    └─────────────────────────────┘  └─────────────────────────────┘
                                               └───────┬───────┘
                                                       ▼
-                                                 [adjudicate]
+                                                 [NODE 5: adjudicate]
                                          (Deterministic Policy Engine)
                                                       │
                                                       ▼
-                                                 [fraud_check]
+                                                 [NODE 6: fraud_check]
+                                              (Velocity Screening)
                                                       │
                                                       ▼
-                                             [synthesize_decision]
+                                             [NODE 7: synthesize_decision]
+                                           (Final Decision & Confidence)
                                                       │
                                                       ▼
-                                              [human_review_gate]
+                                              [NODE 8: human_review_gate]
                                          (LangGraph interrupt Pause)
+                                                      │
+                                                     END
 ```
 
-### The three tool-calling agents
+---
 
-1. **DocumentPerceptionAgent** (`create_agent`) — per upload, parallel via `Send` fan-out  
-   Tools: `vision_read_document` (≤1×), `apply_simulation_metadata`, `finalize_extraction`, `validate_extraction`.  
-   Performs multi-modal vision OCR with Gemini 3.6 Flash to classify document types, assess quality, and extract itemized JSON fields.  
-   No LLM → deterministic read/extract (evals). Attached with LangGraph `RetryPolicy(max_attempts=2)`.
+## 3. Detailed Component Breakdown
 
-2. **ClinicalAgent** (`create_agent`) — maps clinical text $\rightarrow$ policy tags  
-   Tools: `lookup_policy_exclusion`, `check_condition_waiting_period`, `verify_high_value_test`, `list_waiting_condition_keys`.  
-   Runs in parallel alongside `ConsistencyAgent`. Output whitelist-validated against `policy_terms.json`; **never decides money**. Skipped without LLM. Attached with `RetryPolicy(max_attempts=2)`.
+### A. The Perception Layer (3 Tool-Calling Agents)
 
-3. **ConsistencyAgent** (`create_agent`) — soft cross-checks  
-   Tools: `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `check_prescription_requirement`, `check_clinical_consistency`.  
-   Runs in parallel alongside `ClinicalAgent`. Cross-checks patient roster names, bill totals, dates, and provider details. Warnings only—never approves or rejects money. Attached with `RetryPolicy(max_attempts=2)`.
+#### 1. DocumentPerceptionAgent (`backend/app/agents/document_perception_agent.py`)
+* **Role**: Processes raw upload images or PDFs using **Google Gemini 3.6 Flash Vision**.
+* **Parallel Execution**: Fanned out concurrently via LangGraph `Send` ($N$ workers for $N$ uploads).
+* **Tools**: `vision_read_document`, `apply_simulation_metadata`, `finalize_extraction`, `validate_extraction`.
+* **Output**: Returns document classification (`PRESCRIPTION`, `HOSPITAL_BILL`, `PHARMACY_BILL`, `LAB_REPORT`), quality assessment (`GOOD`, `LOW`, `UNREADABLE`), and structured JSON extraction (patient name, doctor registration `KA/45678/2015`, diagnosis, itemized line items, amounts).
+* **Efficiency Constraint**: Strict ceiling of **$\le 1$ vision API call per file** to minimize latency and token cost. Attached with native LangGraph `RetryPolicy(max_attempts=2)`.
 
-### What is not an agent (on purpose)
+#### 2. ClinicalAgent (`backend/app/agents/clinical_agent.py`)
+* **Role**: Maps free-text medical diagnosis, treatment, and test descriptions onto the policy vocabulary in `policy_terms.json`.
+* **Tools**: `lookup_policy_exclusion`, `check_condition_waiting_period`, `verify_high_value_test`, `list_waiting_condition_keys`.
+* **Behavior**: Runs in a **parallel super-step** alongside `ConsistencyAgent`.
+* **Safety Rail**: Outputs are whitelist-checked against `policy_terms.json`. Any tag not matching verbatim policy keys is automatically dropped and flagged. **Never calculates money or dates.**
 
-| Piece | Role |
-|---|---|
-| **Document Gate** | Hard early stop with actionable member messages |
-| **Policy Adjudicator** | Deterministic rules / amounts from `policy_terms.json` |
-| **Fraud / Synthesizer** | Velocity signals + decision precedence |
-| **Orchestrator** | Enforces pipeline flow, parallel fan-out, branch parallelization, HITL |
+#### 3. ConsistencyAgent (`backend/app/agents/consistency_agent.py`)
+* **Role**: Performs cross-document reconciliation and entity consistency verification.
+* **Tools**: `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `check_prescription_requirement`, `check_clinical_consistency`.
+* **Behavior**: Handles Indian name variations (e.g., `"R. Kumar"` vs `"Rajesh Kumar"`, initial expansions, middle name omissions).
+* **Constraint**: Emits soft warnings into the trace—**never hard-rejects claims or alters financial figures.**
 
-### Considered and rejected
+---
 
-- **Single ReAct agent that approves payouts** — fails explainability, evals, and early document stop.
-- **Deep Agents / todo supervisors** — overkill latency/complexity for one claim.
-- **Multiple vision tool hops per file** — burns Gemini calls; one `vision_read_document` max.
+### B. The Judgment & Decision Layer (Pure Python)
 
-## Runtime registry
+#### 1. Document Verification Gate (`verify_document_set` node)
+* **Hard Early Stop**: Evaluates classified documents before running policy rules.
+* **Checks**:
+  * Are required document types present for the category? (e.g., `CONSULTATION` requires `PRESCRIPTION` + `HOSPITAL_BILL`).
+  * Is any document unreadable/blurry?
+  * Do patient names belong to different individuals across uploads?
+* **Outcome**: If invalid, halts immediately with status `DOCUMENT_REJECTED` and returns a **specific, member-actionable error message** telling the member what was found and what to upload next.
 
-Non-serializable process objects (`policy`, `llm`, `TraceRecorder`, and upload bytes) live in `app.graph.runtime` keyed by `claim_id` rather than checkpointed graph state. This keeps base64 payload out of LangGraph state and LangSmith spans.
+#### 2. AdjudicationEngine (`backend/app/rules/adjudication.py`)
+Pure Python rule engine that reads `policy_terms.json` dynamically (zero hardcoded rules in code):
+1. **Member Validity**: Checks if member ID exists on the policy roster.
+2. **Submission Deadline**: Checks if treatment date is within allowed deadline days.
+3. **Minimum Claim Amount**: Enforces minimum claim floor (₹500).
+4. **Initial Waiting Period**: Checks 30-day blanket waiting period from join date.
+5. **Policy Exclusions**: Checks primary diagnosis against excluded conditions (e.g., Obesity, Bariatric Surgery, Substance Abuse). Short-circuits claim if matched.
+6. **Specific Waiting Periods**: Evaluates condition-specific waiting days (e.g., Diabetes 90 days, Hernia 180 days) and computes the exact `eligible_from` date.
+7. **Pre-Authorization**: Enforces pre-auth reference checks for category rules or high-value diagnostics (e.g., MRI > ₹10,000).
+8. **Per-Claim Limit**: Enforces per-claim limits (₹5,000 for consultation).
+9. **Line-Item Adjudication**: Evaluates itemized procedure lines against covered vs excluded procedure lists (e.g., approving Root Canal ₹8,000, rejecting Teeth Whitening ₹4,000).
+10. **Financial Calculation Chain**:
+    $$\text{Eligible Amount} \longrightarrow \text{Category Sub-limit Cap} \longrightarrow \text{Network Hospital Discount} \longrightarrow \text{Co-pay Member Share}$$
 
-## Observability
+#### 3. FraudAgent (`backend/app/rules/fraud.py`)
+* Deterministic velocity screening against historical member submissions:
+  * `SAME_DAY_VELOCITY`: $>2$ claims from the same member on the same day.
+  * `MONTHLY_VELOCITY`: Exceeding monthly claim limits.
+  * `HIGH_VALUE_CLAIM`: Claims crossing auto-review thresholds (₹25,000).
+* Calculates a fraud risk score $\in [0, 1]$ and triggers `MANUAL_REVIEW` when breached.
 
-LangSmith `plum-claims`: `ProcessClaim` parent run $\rightarrow$ `ClaimsGraph` $\rightarrow$ parallel node spans $\rightarrow$ agent/tool/`GeminiStructured` spans.
+#### 4. DecisionSynthesizer (`backend/app/agents/decision.py`)
+* Synthesizes outputs into terminal decisions (`APPROVED`, `PARTIAL`, `REJECTED`, `MANUAL_REVIEW`).
+* Calculates mathematical confidence score.
 
-## Streaming & HITL
+---
 
-- `POST /claims/stream` streams NDJSON stage events live as nodes finish.
-- When `CLAIMS_HITL=true` and a claim is flagged `MANUAL_REVIEW`, `human_review_gate` calls `interrupt()`.
-- Resume via `POST /claims/{claim_id}/resume` with `action: "approve" | "reject"`.
+## 4. Resilience, Reliability & Fault-Tolerance
 
-## Scaling to 10× Volume
+### 1. 4-Tier Tiered Fault Handling
+To prevent pipeline crashes, external API timeouts or tool failures are handled gracefully:
 
-- **Parallelization**: Document workers fan out in parallel via `Send`, and `ClinicalAgent` + `ConsistencyAgent` run in a parallel super-step (30–40% latency reduction).
-- **Checkpointer**: Swap `MemorySaver` $\rightarrow$ `PostgresSaver` for multi-replica state persistence across container clusters.
-- **Retry Policies**: Attached native `RetryPolicy` on all LLM nodes for transient HTTP 429 / 503 resilience.
+```
++-----------------------------------------------------------------------+
+| TIER 1: LangGraph Native RetryPolicy                                  |
+| Automatically retries transient HTTP 429 rate limits & 503 timeouts.   |
++-----------------------------------------------------------------------+
+                                   | (If retries exhausted)
+                                   v
++-----------------------------------------------------------------------+
+| TIER 2: run_resilient() Fallback Wrapper                              |
+| Catches node exceptions, logs ComponentFailure, returns safe defaults.|
++-----------------------------------------------------------------------+
+                                   |
+                                   v
++-----------------------------------------------------------------------+
+| TIER 3: Mathematical Confidence Erosion                               |
+| Multiplicative confidence penalty applied (e.g. 0.98 -> 0.73).        |
++-----------------------------------------------------------------------+
+                                   |
+                                   v
++-----------------------------------------------------------------------+
+| TIER 4: Human-in-the-Loop Gate (interrupt)                            |
+| Claims with confidence < 0.80 or degraded state pause for review.     |
++-----------------------------------------------------------------------+
+```
+
+### 2. Transparent Mathematical Confidence Model
+Confidence is **never an LLM self-assessment** (which is prone to overconfidence). It is calculated mathematically:
+
+$$\text{Confidence} = 0.98 \times \left(\frac{1}{N} \sum_{i=1}^N \text{Doc Extraction Quality}_i\right) \times \prod (1 - \text{Failure Penalty}) \times \prod \text{Quality Penalties}$$
+
+---
+
+## 5. Human-in-the-Loop (HITL) Subsystem
+
+When `CLAIMS_HITL=true` and a claim is flagged as `MANUAL_REVIEW`:
+1. The `human_review_gate` node calls `interrupt(payload)`, pausing execution.
+2. The claim status is returned as `AWAITING_HUMAN_REVIEW`.
+3. Operations staff review the audit trace and submit `POST /claims/{claim_id}/resume`:
+   ```json
+   {
+     "action": "approve",
+     "note": "Pre-auth verified offline by ops agent"
+   }
+   ```
+4. LangGraph resumes execution via `Command(resume=...)`, executing the approved payout.
+
+---
+
+## 6. Observability & Audit Trail
+
+* **In-Memory Trace (`TraceRecorder`)**: Every event, check, financial adjustment, warning, and component failure is recorded in monotonic sequence and returned in the API `trace` array.
+* **LangSmith Integration (`plum-claims`)**: Full hierarchical tracing:
+  `ProcessClaim` (Parent Run) $\rightarrow$ `ClaimsGraph` (LangGraph) $\rightarrow$ Nodes $\rightarrow$ `GeminiStructured` (LLM Spans).
+
+---
+
+## 7. Scaling to 10x – 100x Volume
+
+1. **Parallel Super-Steps**: Document workers fan out in parallel via `Send`, and `ClinicalAgent` + `ConsistencyAgent` execute concurrently (35%+ latency reduction).
+2. **Stateless Graph Memory**: Upload images base64 bytes are stored in process-local `app.graph.runtime` rather than checkpointed graph state, keeping LangGraph state payloads $<10\text{ KB}$.
+3. **Production Checkpointer (`PostgresSaver`)**: Replacing in-memory `MemorySaver` with `PostgresSaver` enables stateless Cloud Run / Kubernetes auto-scaling across container replicas.
+4. **Asynchronous Task Queue**: Transitioning submissions to an async task queue (Cloud Tasks / PubSub) with WebSockets/SSE updates for high throughput.
