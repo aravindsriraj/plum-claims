@@ -108,14 +108,14 @@ The overall claims pipeline is modeled as a stateful **LangGraph Claims Orchestr
 
 #### 2. ClinicalAgent (`backend/app/agents/clinical_agent.py`)
 * **Role**: Maps free-text medical diagnosis, treatment, and test descriptions onto the policy vocabulary in `policy_terms.json`.
-* **Tools**: `lookup_policy_exclusion`, `check_condition_waiting_period`, `verify_high_value_test`, `list_waiting_condition_keys`.
-* **Behavior**: Runs in a **parallel super-step** alongside `ConsistencyAgent`.
+* **LLM-Powered Tools**: `lookup_policy_exclusion`, `check_condition_waiting_period`, `verify_high_value_test`, `list_waiting_condition_keys`. Under the hood, each tool executes a structured mini-LLM call (`with_structured_output`) to perform deep AI-driven semantic categorization of medical terms (e.g. `"T2DM"` -> `"diabetes"`, `"morbid obesity"` -> `"Obesity and weight loss programs"`).
+* **Behavior**: ReAct tool-calling agent constructed via LangChain `create_agent`, running in a **parallel super-step** alongside `ConsistencyAgent`.
 * **Safety Rail**: Outputs are whitelist-checked against `policy_terms.json`. Any tag not matching verbatim policy keys is automatically dropped and flagged. **Never calculates money or dates.**
 
 #### 3. ConsistencyAgent (`backend/app/agents/consistency_agent.py`)
 * **Role**: Performs cross-document reconciliation and entity consistency verification.
-* **Tools**: `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `check_prescription_requirement`, `check_clinical_consistency`.
-* **Behavior**: Handles Indian name variations (e.g., `"R. Kumar"` vs `"Rajesh Kumar"`, initial expansions, middle name omissions).
+* **LLM-Powered Tools**: `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `reconcile_provider_with_llm`, `check_prescription_requirement`, `check_clinical_consistency`.
+* **Behavior**: Uses dedicated LLM tools for name reconciliation (`reconcile_name_with_llm`) and hospital provider reconciliation (`reconcile_provider_with_llm`) to handle Indian naming conventions (e.g., `"R. Kumar"` vs `"Rajesh Kumar"`) and hospital branch/affiliate name variations (e.g., `"Apollo Clinic Indiranagar"` vs `"Apollo Hospitals"`).
 * **Constraint**: Emits soft warnings into the trace—**never hard-rejects claims or alters financial figures.**
 
 ---

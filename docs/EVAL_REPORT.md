@@ -1,6 +1,6 @@
 # Eval Report — 12 Test Cases
 
-Generated: 2026-07-29T11:07:46  
+Generated: 2026-07-29T12:32:30  
 Result: **12/12 passed** (LLM enabled (Gemini 3.6 Flash active for agent tasks))
 
 | Case | Name | Expected | Actual | Result |
@@ -32,7 +32,7 @@ Result: **12/12 passed** (LLM enabled (Gemini 3.6 Flash active for agent tasks))
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-EF4E1B9C: DOCUMENT_REJECTED.
+Claim CLM-00DE2A70: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [MISSING_DOCUMENT] Your consultation claim requires a hospital bill, but you uploaded 'dr_sharma_prescription.jpg' (PRESCRIPTION), 'another_prescription.jpg' (PRESCRIPTION). Please upload your hospital bill to continue.
@@ -44,8 +44,8 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹1,500, 2 document(s).
     2. [PASS] ExtractionAgent: F002: extracted via METADATA (confidence 0.50)
     3. [PASS] ExtractionAgent: F001: extracted via METADATA (confidence 0.50)
-    4. [PASS] DocumentPerceptionAgent: another_prescription.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for prescription document (file_id=F002).).
-    5. [PASS] DocumentPerceptionAgent: dr_sharma_prescription.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed using simulation metadata.).
+    4. [PASS] DocumentPerceptionAgent: another_prescription.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed prescription document using simulation metadata.).
+    5. [PASS] DocumentPerceptionAgent: dr_sharma_prescription.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted prescription metadata for Dr. Sharma prescription (file_id=F001).).
     6. [WARN] DocumentVerificationAgent: Required document HOSPITAL_BILL is missing from the upload.
     7. [WARN] DocumentVerificationAgent: F002: PRESCRIPTION does not satisfy the requirements.
 ```
@@ -62,7 +62,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-379F9770: DOCUMENT_REJECTED.
+Claim CLM-ED612772: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [UNREADABLE_DOCUMENT] We couldn't read your pharmacy bill ('blurry_bill.jpg') — the image is too blurry or damaged. Please re-upload a clear photo of that same document. Your claim has NOT been rejected; it will continue once we can read this document.
@@ -73,8 +73,8 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: PHARMACY, ₹800, 2 document(s).
     2. [PASS] ExtractionAgent: F003: extracted via METADATA (confidence 0.50)
     3. [PASS] ExtractionAgent: F004: extracted via METADATA (confidence 0.50)
-    4. [PASS] DocumentPerceptionAgent: prescription.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted prescription document via simulation metadata.).
-    5. [PASS] DocumentPerceptionAgent: blurry_bill.jpg: perceived as PHARMACY_BILL (quality UNREADABLE, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for unreadable PHARMACY_BILL document (blurry_bill.jpg).).
+    4. [PASS] DocumentPerceptionAgent: prescription.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed via simulation metadata.).
+    5. [PASS] DocumentPerceptionAgent: blurry_bill.jpg: perceived as PHARMACY_BILL (quality UNREADABLE, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for document F004 (blurry_bill.jpg, PHARMACY). Quality is UNREADABLE.).
     6. [WARN] DocumentVerificationAgent: F004: document unreadable, re-upload requested.
 ```
 </details>
@@ -90,7 +90,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-5697C9AC: DOCUMENT_REJECTED.
+Claim CLM-A4FD82AE: DOCUMENT_REJECTED.
 
 Processing stopped at document verification:
   [PATIENT_MISMATCH] Your documents appear to belong to different people: 'prescription_rajesh.jpg' belongs to Rajesh Kumar; 'bill_arjun.jpg' belongs to Arjun Mehta. Please upload documents for Rajesh Kumar only.
@@ -101,8 +101,8 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹1,500, 2 document(s).
     2. [PASS] ExtractionAgent: F006: extracted via METADATA (confidence 0.50)
     3. [PASS] ExtractionAgent: F005: extracted via METADATA (confidence 0.50)
-    4. [PASS] DocumentPerceptionAgent: bill_arjun.jpg: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed bill_arjun.jpg using simulation metadata for HOSPITAL_BILL claim.).
-    5. [PASS] DocumentPerceptionAgent: prescription_rajesh.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed using simulation metadata for Rajesh.).
+    4. [PASS] DocumentPerceptionAgent: bill_arjun.jpg: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed consultation bill document bill_arjun.jpg using simulation metadata.).
+    5. [PASS] DocumentPerceptionAgent: prescription_rajesh.jpg: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document for Rajesh processed using simulation metadata.).
     6. [WARN] DocumentVerificationAgent: Patient mismatch across documents: 'prescription_rajesh.jpg' belongs to Rajesh Kumar; 'bill_arjun.jpg' belongs to Arjun Mehta.
 ```
 </details>
@@ -117,7 +117,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-DB5BD1CA: DECIDED.
+Claim CLM-E4BD90B9: DECIDED.
 
 Decision: APPROVED — approved ₹1,350 of ₹1,500 (confidence 0.98).
   All checks passed. Approved ₹1,350 of ₹1,500.
@@ -128,15 +128,15 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹1,500, 2 document(s).
     2. [PASS] ExtractionAgent: F008: extracted via PROVIDED_CONTENT (confidence 1.00)
     3. [PASS] ExtractionAgent: F007: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F008: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed simulation metadata for document F008 (HOSPITAL_BILL).).
-    5. [PASS] DocumentPerceptionAgent: F007: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted consultation/prescription document using simulation metadata with high confidence.).
+    4. [PASS] DocumentPerceptionAgent: F008: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed simulation metadata for document F008 (HOSPITAL_BILL, quality: GOOD).).
+    5. [PASS] DocumentPerceptionAgent: F007: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed prescription document using simulation metadata.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
-    7. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹1,500).
-    8. [PASS] ConsistencyAgent: Prescription present.
-    9. [PASS] ConsistencyAgent: Patient name 'Rajesh Kumar' consistent across documents.
-   10. [PASS] ConsistencyAgent: Document dates checked against treatment date.
+    7. [PASS] ConsistencyAgent: Document dates checked against treatment date.
+    8. [PASS] ConsistencyAgent: Patient name 'Rajesh Kumar' consistent across documents.
+    9. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹1,500).
+   10. [PASS] ConsistencyAgent: Prescription present.
    11. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
-   12. [PASS] ClinicalTaggingAgent: Patient presented with Viral Fever and was prescribed Paracetamol and Vitamin C (F007). Hospital bill F008 contained no line items or diagnoses. No waiting-period conditions, policy exclusions, or high-value tests were identified.
+   12. [PASS] ClinicalTaggingAgent: No policy waiting period conditions, exclusions, or high-value tests were identified in the evaluated claim documents.
    13. [PASS] AdjudicationEngine: Member validity: Member EMP001 found in policy roster.
    14. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
    15. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -167,7 +167,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-07F1126E: DECIDED.
+Claim CLM-7AD91015: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹3,000 (confidence 0.98).
   diabetes: 90-day waiting period not served. Eligible from 2024-11-30.
@@ -176,8 +176,8 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹3,000, 2 document(s).
     2. [PASS] ExtractionAgent: F010: extracted via PROVIDED_CONTENT (confidence 1.00)
     3. [PASS] ExtractionAgent: F009: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F010: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted document F010 of type HOSPITAL_BILL with quality GOOD.).
-    5. [PASS] DocumentPerceptionAgent: F009: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed via simulation metadata.).
+    4. [PASS] DocumentPerceptionAgent: F010: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed simulation metadata for document file_id F010 (hospital bill).).
+    5. [PASS] DocumentPerceptionAgent: F009: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed consultation claim document F009 using simulation metadata. Document type identified as PRESCRIPTION with GOOD quality. Extraction finalized and validated successfully.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     7. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹3,000).
     8. [PASS] ConsistencyAgent: Patient name 'Vikram Joshi' consistent across documents.
@@ -185,7 +185,7 @@ Pipeline trace:
    10. [PASS] ConsistencyAgent: Document dates checked against treatment date.
    11. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
    12. [WARN] ClinicalTaggingAgent: Semantic tagger found condition 'diabetes' in F010 that the deterministic matcher missed (alias gap) — accepted via LLM.
-   13. [PASS] ClinicalTaggingAgent: Document F009 diagnosis of Type 2 Diabetes Mellitus matches the waiting period condition for diabetes. No exclusions or high-value tests were identified.
+   13. [PASS] ClinicalTaggingAgent: Document F009 includes a diagnosis of Type 2 Diabetes Mellitus matching policy condition key 'diabetes', prescribed with Metformin and Glimepiride. Document F010 is a hospital bill containing no clinical diagnoses, treatments, or tests.
    14. [PASS] AdjudicationEngine: Member validity: Member EMP005 found in policy roster.
    15. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
    16. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -211,7 +211,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-792E81A3: DECIDED.
+Claim CLM-DE93EAA9: DECIDED.
 
 Decision: PARTIAL — approved ₹8,000 of ₹12,000 (confidence 0.98).
   Approved ₹8,000 of ₹12,000.
@@ -221,12 +221,12 @@ Decision: PARTIAL — approved ₹8,000 of ₹12,000 (confidence 0.98).
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: DENTAL, ₹12,000, 1 document(s).
     2. [PASS] ExtractionAgent: F011: extracted via PROVIDED_CONTENT (confidence 1.00)
-    3. [PASS] DocumentPerceptionAgent: F011: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for dental claim hospital bill.).
+    3. [PASS] DocumentPerceptionAgent: F011: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted health insurance document metadata for file_id F011 (DENTAL category / HOSPITAL_BILL type).).
     4. [PASS] DocumentVerificationAgent: Document set satisfies DENTAL requirements (required: ['HOSPITAL_BILL']).
-    5. [PASS] ClinicalTaggingAgent: No diagnosis, treatment, medicines, or tests ordered were found in Document F011.
-    6. [PASS] ConsistencyAgent: Patient name 'Priya Singh' consistent across documents.
-    7. [PASS] ConsistencyAgent: Document dates checked against treatment date.
-    8. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹12,000).
+    5. [PASS] ConsistencyAgent: Document dates checked against treatment date.
+    6. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹12,000).
+    7. [PASS] ConsistencyAgent: Patient name 'Priya Singh' consistent across documents.
+    8. [PASS] ClinicalTaggingAgent: No diagnoses, treatments, or tests were listed in the claim document.
     9. [PASS] AdjudicationEngine: Member validity: Member EMP002 found in policy roster.
    10. [PASS] AdjudicationEngine: Category coverage: DENTAL is a covered category under this policy.
    11. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -259,7 +259,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-D369F2B8: DECIDED.
+Claim CLM-B0BCAD74: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹15,000 (confidence 0.98).
   'MRI Lumbar Spine' (MRI, ₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
@@ -267,32 +267,31 @@ Decision: REJECTED — approved ₹0 of ₹15,000 (confidence 0.98).
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: DIAGNOSTIC, ₹15,000, 3 document(s).
     2. [PASS] ExtractionAgent: F014: extracted via PROVIDED_CONTENT (confidence 1.00)
-    3. [PASS] ExtractionAgent: F013: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] ExtractionAgent: F012: extracted via PROVIDED_CONTENT (confidence 1.00)
-    5. [PASS] DocumentPerceptionAgent: F013: perceived as LAB_REPORT (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed simulation metadata for document F013 (DIAGNOSTIC lab report).).
-    6. [PASS] DocumentPerceptionAgent: F012: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed diagnostic document (Prescription) using simulation metadata.).
-    7. [PASS] DocumentPerceptionAgent: F014: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for hospital bill diagnostic claim.).
+    3. [PASS] ExtractionAgent: F012: extracted via PROVIDED_CONTENT (confidence 1.00)
+    4. [PASS] ExtractionAgent: F013: extracted via PROVIDED_CONTENT (confidence 1.00)
+    5. [PASS] DocumentPerceptionAgent: F012: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed using simulation metadata.).
+    6. [PASS] DocumentPerceptionAgent: F014: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for hospital bill claim under diagnostic category.).
+    7. [PASS] DocumentPerceptionAgent: F013: perceived as LAB_REPORT (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for document F013 (diagnostic lab report).).
     8. [PASS] DocumentVerificationAgent: Document set satisfies DIAGNOSTIC requirements (required: ['PRESCRIPTION', 'LAB_REPORT', 'HOSPITAL_BILL']).
     9. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹15,000).
    10. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
    11. [PASS] ConsistencyAgent: Prescription present.
    12. [PASS] ConsistencyAgent: Document dates checked against treatment date.
    13. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
-   14. [WARN] ClinicalTaggingAgent: Dropped unknown high-value test tag 'MRI Lumbar Spine'.
-   15. [PASS] ClinicalTaggingAgent: Document F012 lists a diagnosis of Suspected Lumbar Disc Herniation and orders an MRI Lumbar Spine, identified as a high-value imaging test. No policy exclusions or specific condition waiting periods were matched.
-   16. [PASS] AdjudicationEngine: Member validity: Member EMP007 found in policy roster.
-   17. [PASS] AdjudicationEngine: Category coverage: DIAGNOSTIC is a covered category under this policy.
-   18. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
-   19. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹15,000 meets the minimum of ₹500.
-   20. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-02 is on/after the end of the 30-day initial waiting period (2024-05-01).
-   21. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
-   22. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
-   23. [FAIL] AdjudicationEngine: Pre-authorization: 'MRI Lumbar Spine' (MRI, ₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
-   24. [PASS] FraudAgent: No fraud signals detected.
-   25. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
-   26. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
-   27. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
-   28. [PASS] MemberMessagePolisher: Member message polished (all figures preserved verbatim).
+   14. [PASS] ClinicalTaggingAgent: The claim documents specify an MRI Lumbar Spine ordered for suspected lumbar disc herniation. MRI is identified as a high-value test. No master policy exclusions or specific condition waiting periods apply.
+   15. [PASS] AdjudicationEngine: Member validity: Member EMP007 found in policy roster.
+   16. [PASS] AdjudicationEngine: Category coverage: DIAGNOSTIC is a covered category under this policy.
+   17. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
+   18. [PASS] AdjudicationEngine: Minimum claim amount: Claimed ₹15,000 meets the minimum of ₹500.
+   19. [PASS] AdjudicationEngine: Initial waiting period: Treatment date 2024-11-02 is on/after the end of the 30-day initial waiting period (2024-05-01).
+   20. [PASS] AdjudicationEngine: Policy exclusions: No policy exclusion matches the diagnosis/treatment.
+   21. [SKIP] AdjudicationEngine: Specific waiting periods: no waiting-listed condition detected (conditions checked: none matched).
+   22. [FAIL] AdjudicationEngine: Pre-authorization: 'MRI Lumbar Spine' (MRI, ₹15,000) is a high-value test requiring pre-authorization above ₹10,000. No pre-authorization reference was submitted. The member should obtain pre-authorization from the insurer and resubmit the claim with the pre-auth reference number.
+   23. [PASS] FraudAgent: No fraud signals detected.
+   24. [PASS] FraudAgent: Fraud score 0.00; manual review not required.
+   25. [PASS] DecisionSynthesizer: Confidence computed: 0.98 (extraction quality x component-failure penalties).
+   26. [FAIL] DecisionSynthesizer: Decision: REJECTED — approved ₹0, confidence 0.98.
+   27. [PASS] MemberMessagePolisher: Member message polished (all figures preserved verbatim).
 ```
 </details>
 
@@ -308,24 +307,24 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-56630365: DECIDED.
+Claim CLM-EC157A79: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹7,500 (confidence 0.98).
   Claimed amount ₹7,500 exceeds the per-claim limit of ₹5,000.
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹7,500, 2 document(s).
-    2. [PASS] ExtractionAgent: F015: extracted via PROVIDED_CONTENT (confidence 1.00)
-    3. [PASS] ExtractionAgent: F016: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F016: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully extracted medical document F016 (Hospital Bill) using simulation metadata with high confidence.).
-    5. [PASS] DocumentPerceptionAgent: F015: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed prescription document using simulation metadata.).
+    2. [PASS] ExtractionAgent: F016: extracted via PROVIDED_CONTENT (confidence 1.00)
+    3. [PASS] ExtractionAgent: F015: extracted via PROVIDED_CONTENT (confidence 1.00)
+    4. [PASS] DocumentPerceptionAgent: F016: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for hospital bill document F016.).
+    5. [PASS] DocumentPerceptionAgent: F015: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Processed simulation metadata for prescription document.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     7. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹7,500).
-    8. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
-    9. [PASS] ConsistencyAgent: Prescription present.
+    8. [PASS] ConsistencyAgent: Prescription present.
+    9. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
    10. [PASS] ConsistencyAgent: Document dates checked against treatment date.
    11. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
-   12. [PASS] ClinicalTaggingAgent: Document F015 records a diagnosis of Gastroenteritis treated with Antibiotics, Probiotics, and ORS, while Document F016 contains no clinical details. No policy exclusions, condition waiting periods, or high-value tests were detected.
+   12. [PASS] ClinicalTaggingAgent: No specific waiting period conditions, policy exclusions, or high-value imaging tests were identified for Document F015 (Gastroenteritis) or Document F016.
    13. [PASS] AdjudicationEngine: Member validity: Member EMP003 found in policy roster.
    14. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
    15. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -355,7 +354,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-1B2F3EB6: DECIDED.
+Claim CLM-75C0502B: DECIDED.
 
 Decision: MANUAL_REVIEW — approved ₹0 of ₹4,800 (confidence 0.98).
   Routed to manual review due to fraud/risk signals:
@@ -368,14 +367,14 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹4,800, 2 document(s).
     2. [PASS] ExtractionAgent: F017: extracted via PROVIDED_CONTENT (confidence 1.00)
     3. [PASS] ExtractionAgent: F018: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F018: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted medical document details from simulation metadata for claim category CONSULTATION (type: HOSPITAL_BILL).).
-    5. [PASS] DocumentPerceptionAgent: F017: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed via simulation metadata successfully.).
+    4. [PASS] DocumentPerceptionAgent: F017: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully extracted medical document simulation metadata for claim category CONSULTATION (type: PRESCRIPTION, quality: GOOD).).
+    5. [PASS] DocumentPerceptionAgent: F018: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted simulation metadata for document F018 (HOSPITAL_BILL) successfully.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
-    7. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
-    8. [PASS] ConsistencyAgent: Prescription present.
-    9. [PASS] ConsistencyAgent: Document dates checked against treatment date.
-   10. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹4,800).
-   11. [PASS] ClinicalTaggingAgent: Document F017 is a prescription for Migraine with no specific waiting period or policy exclusion, and no treatments or tests ordered. Document F018 is a hospital bill with no diagnosis or line items listed.
+    7. [PASS] ConsistencyAgent: Document dates checked against treatment date.
+    8. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹4,800).
+    9. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
+   10. [PASS] ConsistencyAgent: Prescription present.
+   11. [PASS] ClinicalTaggingAgent: Document F017 indicates a diagnosis of Migraine with no associated treatments, medicines, or tests ordered. Document F018 lists no diagnosis, treatments, medicines, or tests. No policy waiting period conditions, exclusions, or high-value tests apply to these documents.
    12. [PASS] AdjudicationEngine: Member validity: Member EMP008 found in policy roster.
    13. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
    14. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -406,7 +405,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-3133A4C6: DECIDED.
+Claim CLM-132D5D0D: DECIDED.
 
 Decision: APPROVED — approved ₹3,240 of ₹4,500 (confidence 0.98).
   All checks passed. Approved ₹3,240 of ₹4,500.
@@ -416,17 +415,17 @@ Financial breakdown:
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹4,500, 2 document(s).
-    2. [PASS] ExtractionAgent: F020: extracted via PROVIDED_CONTENT (confidence 1.00)
-    3. [PASS] ExtractionAgent: F019: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F019: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed successfully using simulation metadata.).
-    5. [PASS] DocumentPerceptionAgent: F020: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Document file_id F020 processed successfully via simulation metadata as HOSPITAL_BILL with 2 line items.).
+    2. [PASS] ExtractionAgent: F019: extracted via PROVIDED_CONTENT (confidence 1.00)
+    3. [PASS] ExtractionAgent: F020: extracted via PROVIDED_CONTENT (confidence 1.00)
+    4. [PASS] DocumentPerceptionAgent: F019: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed prescription document F019 using simulation metadata.).
+    5. [PASS] DocumentPerceptionAgent: F020: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Hospital bill processed successfully via simulation metadata with 2 line items.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
-    7. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹4,500).
-    8. [PASS] ConsistencyAgent: Document dates checked against treatment date.
-    9. [PASS] ConsistencyAgent: Prescription present.
-   10. [PASS] ConsistencyAgent: Patient name 'Deepak Shah' consistent across documents.
-   11. [PASS] ClinicalTaggingAgent: Acute Bronchitis identified in the prescription document is covered under the policy with no matching policy exclusions, waiting-period conditions, or high-value imaging tests.
-   12. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
+    7. [PASS] ConsistencyAgent: Document dates checked against treatment date.
+    8. [PASS] ConsistencyAgent: Patient name 'Deepak Shah' consistent across documents.
+    9. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹4,500).
+   10. [PASS] ConsistencyAgent: Prescription present.
+   11. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
+   12. [PASS] ClinicalTaggingAgent: No policy waiting period conditions, exclusions, or high-value imaging tests were identified across Documents F019 and F020.
    13. [PASS] AdjudicationEngine: Member validity: Member EMP010 found in policy roster.
    14. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
    15. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -460,7 +459,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-795956A4: DECIDED.
+Claim CLM-AB097AA2: DECIDED.
 
 Decision: APPROVED — approved ₹4,000 of ₹4,000 (confidence 0.73).
   All checks passed. Approved ₹4,000 of ₹4,000.
@@ -468,13 +467,13 @@ WARNING: processing was degraded (see component failures).
 
 Pipeline trace:
     1. [PASS] Pipeline: Claim received: ALTERNATIVE_MEDICINE, ₹4,000, 2 document(s).
-    2. [PASS] ExtractionAgent: F021: extracted via PROVIDED_CONTENT (confidence 1.00)
-    3. [PASS] ExtractionAgent: F022: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F022: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Document file_id F022 processed successfully via simulation metadata for alternative medicine claim.).
-    5. [PASS] DocumentPerceptionAgent: F021: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted prescription document via simulation metadata for claim category ALTERNATIVE_MEDICINE.).
+    2. [PASS] ExtractionAgent: F022: extracted via PROVIDED_CONTENT (confidence 1.00)
+    3. [PASS] ExtractionAgent: F021: extracted via PROVIDED_CONTENT (confidence 1.00)
+    4. [PASS] DocumentPerceptionAgent: F021: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed alternative medicine document simulation metadata for claim evaluation.).
+    5. [PASS] DocumentPerceptionAgent: F022: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Successfully processed alternative medicine claim document F022 (Hospital Bill) using simulation metadata.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies ALTERNATIVE_MEDICINE requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
     7. [FAIL] ConsistencyAgent: Component failed and was skipped: RuntimeError: Simulated component failure (fault injection). Fallback: consistency checks skipped; decision made on extracted data only.
-    8. [PASS] ClinicalTaggingAgent: Document F021 notes Chronic Joint Pain treated with Panchakarma Therapy. Neither Chronic Joint Pain nor Panchakarma Therapy matches any policy exclusions or specific waiting-period condition keys.
+    8. [PASS] ClinicalTaggingAgent: Document F021 (Chronic Joint Pain, Panchakarma Therapy) and Document F022 (no diagnosis/treatment) contain no matching policy exclusions, specific waiting period conditions, or high-value tests.
     9. [PASS] AdjudicationEngine: Member validity: Member EMP006 found in policy roster.
    10. [PASS] AdjudicationEngine: Category coverage: ALTERNATIVE_MEDICINE is a covered category under this policy.
    11. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
@@ -505,7 +504,7 @@ Pipeline trace:
 <details><summary>Full trace</summary>
 
 ```
-Claim CLM-56153931: DECIDED.
+Claim CLM-820BBDE2: DECIDED.
 
 Decision: REJECTED — approved ₹0 of ₹8,000 (confidence 0.98).
   Treatment relates to 'Morbid Obesity — BMI 37', which falls under the policy exclusion 'Obesity and weight loss programs'. Excluded conditions are never payable under this policy.
@@ -514,17 +513,17 @@ Pipeline trace:
     1. [PASS] Pipeline: Claim received: CONSULTATION, ₹8,000, 2 document(s).
     2. [PASS] ExtractionAgent: F024: extracted via PROVIDED_CONTENT (confidence 1.00)
     3. [PASS] ExtractionAgent: F023: extracted via PROVIDED_CONTENT (confidence 1.00)
-    4. [PASS] DocumentPerceptionAgent: F024: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted hospital bill information via simulation metadata.).
-    5. [PASS] DocumentPerceptionAgent: F023: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document extracted via simulation metadata for claim category CONSULTATION.).
+    4. [PASS] DocumentPerceptionAgent: F023: perceived as PRESCRIPTION (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Prescription document processed via simulation metadata.).
+    5. [PASS] DocumentPerceptionAgent: F024: perceived as HOSPITAL_BILL (quality GOOD, via agent tools ['apply_simulation_metadata', 'finalize_extraction', 'validate_extraction']; Extracted medical document details from simulation metadata.).
     6. [PASS] DocumentVerificationAgent: Document set satisfies CONSULTATION requirements (required: ['PRESCRIPTION', 'HOSPITAL_BILL']).
-    7. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹8,000).
-    8. [PASS] ConsistencyAgent: Prescription present.
-    9. [PASS] ConsistencyAgent: Document dates checked against treatment date.
-   10. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
+    7. [PASS] ConsistencyAgent: Document dates checked against treatment date.
+    8. [PASS] ConsistencyAgent: Claimed amount matches bill total (₹8,000).
+    9. [WARN] ConsistencyAgent: No patient name could be extracted from any document.
+   10. [PASS] ConsistencyAgent: Prescription present.
    11. [PASS] ConsistencyAgent: Clinical consistency verified: treatment aligns with diagnosis.
    12. [WARN] ClinicalTaggingAgent: Semantic tagger found condition 'obesity_treatment' in F024 that the deterministic matcher missed (alias gap) — accepted via LLM.
    13. [WARN] ClinicalTaggingAgent: Semantic tagger matched exclusion 'Obesity and weight loss programs' in F024 that the deterministic matcher missed — accepted via LLM.
-   14. [PASS] ClinicalTaggingAgent: Document F023 indicates Morbid Obesity with a bariatric consultation and customised diet plan, matching the exclusion 'Obesity and weight loss programs' and the condition-specific waiting period 'obesity_treatment'.
+   14. [PASS] ClinicalTaggingAgent: Document F023 contains a diagnosis of Morbid Obesity — BMI 37, which maps to the waiting period condition key 'obesity_treatment' and is excluded under 'Obesity and weight loss programs'. Document F024 contains no clinical findings, tests, or diagnoses.
    15. [PASS] AdjudicationEngine: Member validity: Member EMP009 found in policy roster.
    16. [PASS] AdjudicationEngine: Category coverage: CONSULTATION is a covered category under this policy.
    17. [SKIP] AdjudicationEngine: Submission deadline: NOT_EVALUATED (no submission_date provided).
