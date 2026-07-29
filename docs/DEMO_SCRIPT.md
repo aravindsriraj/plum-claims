@@ -20,43 +20,58 @@ This script is the definitive, word-for-word recording guide for the **8–12 mi
 ## Architecture Summary Reference
 
 ```
-                             Claims Orchestrator (LangGraph)
-                                           │
-         LangGraph Send (Parallel Fan-Out × N Uploads)
-                                           ▼
-            ┌─────────────────────────────────────────────────────────┐
-            │ [document_worker × N]                                   │
-            │ 🤖 DocumentPerceptionAgent (tool-calling, Gemini Vision)│
-            └─────────────────────────────────────────────────────────┘
-                                           │
-                                           ▼
-                                [verify_document_set]
-                             (Document Verification Gate)
-                                           │
-                            issues? ───────┴─────── pass?
-                               │                      │
-                               ▼                      ▼
-                      [DOCUMENT_REJECTED]     PARALLEL SUPER-STEP
-                                              ┌───────┴───────┐
-                                              ▼               ▼
-                   ┌─────────────────────────────┐  ┌─────────────────────────────┐
-                   │ [clinical_tagging]          │  │ [cross_validate]            │
-                   │ 🤖 ClinicalAgent            │  │ 🤖 ConsistencyAgent         │
-                   └─────────────────────────────┘  └─────────────────────────────┘
-                                              └───────┬───────┘
-                                                      ▼
-                                                 [adjudicate]
-                                         (Deterministic Policy Engine)
-                                                      │
-                                                      ▼
-                                                 [fraud_check]
-                                                      │
-                                                      ▼
-                                             [synthesize_decision]
-                                                      │
-                                                      ▼
-                                              [human_review_gate]
-                                         (LangGraph interrupt Pause)
+                             START (Claim Submission)
+                                        │
+                                        ▼
+                  ┌──────────────────────────────────────────┐
+                  │ 1. Read Uploaded Documents (Parallel AI) │
+                  │    - Vision OCR + Text Extraction        │
+                  └─────────────────────┬────────────────────┘
+                                        │
+                                        ▼
+                  ┌──────────────────────────────────────────┐
+                  │ 2. Document Verification Gate            │
+                  │    - Checks Missing / Blurry / Wrong Docs│
+                  └─────────────────────┬────────────────────┘
+                                        │
+                       ┌────────────────┴────────────────┐
+                 (Has Issues)                       (Valid Docs)
+                       │                                 │
+                       ▼                                 ▼
+             [ DOCUMENT REJECTED ]              PARALLEL AI STEP
+           (Ask Member to Re-upload)      ┌──────────────┴──────────────┐
+                                          ▼                             ▼
+                              ┌──────────────────────┐      ┌──────────────────────┐
+                              │ 3. Clinical AI Tagger│      │ 4. Consistency AI    │
+                              │    (Diagnoses & Tags)│      │    (Name & Provider) │
+                              └───────────┬──────────┘      └───────────┬──────────┘
+                                          └──────────────┬──────────────┘
+                                                         │
+                                                         ▼
+                              ┌────────────────────────────────────┐
+                              │ 5. Policy Adjudication Engine      │
+                              │    (Python Money Math & Limits)    │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                 ▼
+                              ┌────────────────────────────────────┐
+                              │ 6. Fraud Velocity Screening        │
+                              │    (Check Repeat / High-Value)     │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                 ▼
+                              ┌────────────────────────────────────┐
+                              │ 7. Decision Synthesizer            │
+                              │    (Calculate Confidence Score)    │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                 ▼
+                              ┌────────────────────────────────────┐
+                              │ 8. Operations Review Gate (HITL)   │
+                              │    (Optional Human Pause / Resume) │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                END
 ```
 
 ---

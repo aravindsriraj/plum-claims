@@ -12,30 +12,28 @@ To solve this, our system is built around a single core architectural thesis:
 > **"LLMs for Perception, Deterministic Code for Judgment"**
 
 ```
-                                  +------------------------------------+
-                                  |     UNSTRUCTURED INPUT DATA        |
-                                  | (Images, PDFs, Handwritten text)   |
-                                  +------------------------------------+
-                                                    |
-                                                    v
-                                  +------------------------------------+
-                                  |      PERCEPTION LAYER (AI)         |
-                                  |  3 Tool-Calling Gemini 3.6 Flash   |
-                                  |  Agents extract structured JSON    |
-                                  +------------------------------------+
-                                                    |
-                                                    v
-                                  +------------------------------------+
-                                  |      JUDGMENT LAYER (CODE)         |
-                                  |  Deterministic Python Rule Engine  |
-                                  |  reads directly from policy JSON   |
-                                  +------------------------------------+
-                                                    |
-                                                    v
-                                  +------------------------------------+
-                                  |   100% EXPLAINABLE CLAIM DECISION  |
-                                  |   & Complete Step-by-Step Trace    |
-                                  +------------------------------------+
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                      1. UNSTRUCTURED INPUT DATA                        │
+ │           (Medical Uploads: Prescriptions, Bills, Lab Reports)         │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                       2. PERCEPTION LAYER (AI)                         │
+ │     Gemini 3.6 Flash Agents: OCR Vision + Semantic Medical Tagging     │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                       3. JUDGMENT LAYER (CODE)                         │
+ │     Deterministic Python Rule Engine: Payouts, Co-pays, Waiting Dates   │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                     4. EXPLAINABLE CLAIM OUTCOME                       │
+ │         Final Decision + Approved Amount + Complete Audit Trace        │
+ └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Why This Division of Responsibilities?
@@ -50,47 +48,58 @@ To solve this, our system is built around a single core architectural thesis:
 The overall claims pipeline is modeled as a stateful **LangGraph Claims Orchestrator** enforcing execution sequence, parallel fan-out, parallel super-steps, early gate halts, and human-in-the-loop pauses.
 
 ```
-                             Claims Orchestrator (LangGraph)
-                                           │
-         LangGraph Send (Parallel Fan-Out × N Uploads)
-                                           ▼
-            ┌─────────────────────────────────────────────────────────┐
-            │ [NODE 1: document_worker × N]                           │
-            │ 🤖 DocumentPerceptionAgent (tool-calling, Gemini Vision)│
-            └─────────────────────────────────────────────────────────┘
-                                           │
-                                           ▼
-                                [NODE 2: verify_document_set]
-                             (Document Verification Gate)
-                                           │
-                            issues? ───────┴─────── pass?
-                               │                      │
-                               ▼                      ▼
-                   [END: DOCUMENT_REJECTED]   PARALLEL SUPER-STEP
-                                              ┌───────┴───────┐
-                                              ▼               ▼
-                   ┌─────────────────────────────┐  ┌─────────────────────────────┐
-                   │ [NODE 3: clinical_tagging]  │  │ [NODE 4: cross_validate]    │
-                   │ 🤖 ClinicalAgent            │  │ 🤖 ConsistencyAgent         │
-                   └─────────────────────────────┘  └─────────────────────────────┘
-                                              └───────┬───────┘
-                                                      ▼
-                                                 [NODE 5: adjudicate]
-                                         (Deterministic Policy Engine)
-                                                      │
-                                                      ▼
-                                                 [NODE 6: fraud_check]
-                                              (Velocity Screening)
-                                                      │
-                                                      ▼
-                                             [NODE 7: synthesize_decision]
-                                           (Final Decision & Confidence)
-                                                      │
-                                                      ▼
-                                              [NODE 8: human_review_gate]
-                                         (LangGraph interrupt Pause)
-                                                      │
-                                                     END
+                             START (Claim Submission)
+                                        │
+                                        ▼
+                  ┌──────────────────────────────────────────┐
+                  │ 1. Read Uploaded Documents (Parallel AI) │
+                  │    - Vision OCR + Text Extraction        │
+                  └─────────────────────┬────────────────────┘
+                                        │
+                                        ▼
+                  ┌──────────────────────────────────────────┐
+                  │ 2. Document Verification Gate            │
+                  │    - Checks Missing / Blurry / Wrong Docs│
+                  └─────────────────────┬────────────────────┘
+                                        │
+                       ┌────────────────┴────────────────┐
+                 (Has Issues)                       (Valid Docs)
+                       │                                 │
+                       ▼                                 ▼
+             [ DOCUMENT REJECTED ]              PARALLEL AI STEP
+           (Ask Member to Re-upload)      ┌──────────────┴──────────────┐
+                                          ▼                             ▼
+                              ┌──────────────────────┐      ┌──────────────────────┐
+                              │ 3. Clinical AI Tagger│      │ 4. Consistency AI    │
+                              │    (Diagnoses & Tags)│      │    (Name & Provider) │
+                              └───────────┬──────────┘      └───────────┬──────────┘
+                                          └──────────────┬──────────────┘
+                                                         │
+                                                         ▼
+                              ┌────────────────────────────────────┐
+                              │ 5. Policy Adjudication Engine      │
+                              │    (Python Money Math & Limits)    │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                 ▼
+                              ┌────────────────────────────────────┐
+                              │ 6. Fraud Velocity Screening        │
+                              │    (Check Repeat / High-Value)     │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                 ▼
+                              ┌────────────────────────────────────┐
+                              │ 7. Decision Synthesizer            │
+                              │    (Calculate Confidence Score)    │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                 ▼
+                              ┌────────────────────────────────────┐
+                              │ 8. Operations Review Gate (HITL)   │
+                              │    (Optional Human Pause / Resume) │
+                              └──────────────────┬─────────────────┘
+                                                 │
+                                                END
 ```
 
 ---
