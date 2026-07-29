@@ -61,7 +61,7 @@ Issues: `UNREADABLE_DOCUMENT`, `MISSING_DOCUMENT`, `WRONG_DOCUMENT_TYPE`, `PATIE
 | **Output** | `list[str]` soft warnings |
 | **Raises** | `RuntimeError` when `simulate_component_failure` (by design, in the graph node) |
 
-**Tools:** `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `check_prescription_requirement`, `check_clinical_consistency`.
+**Tools:** `check_patient_names`, `reconcile_name_with_llm`, `check_document_dates`, `check_amount_vs_bills`, `check_provider_consistency`, `reconcile_provider_with_llm`, `check_prescription_requirement`, `check_clinical_consistency`.
 
 Required tools skipped by the planner are re-run in code. Warnings only — never hard-stop.
 
